@@ -214,12 +214,12 @@ public class Batcher : IDisposable
 
 	public static Matrix4x4 CreateProjectionMatrix(Point2 size)
 	{
-		var matrix = Matrix4x4.CreateOrthographicOffCenter(0, size.X, size.Y, 0, 0, float.MaxValue);
 #if BROWSER
 		// Use one coordinate convention for browser render targets and the canvas.
-		matrix = Matrix4x4.CreateOrthographicOffCenter(0, size.X, 0, size.Y, 0, float.MaxValue);
+		return Matrix4x4.CreateOrthographicOffCenter(0, size.X, 0, size.Y, 0, float.MaxValue);
+#else
+		return Matrix4x4.CreateOrthographicOffCenter(0, size.X, size.Y, 0, 0, float.MaxValue);
 #endif
-		return matrix;
 	}
 
 	/// <summary>
