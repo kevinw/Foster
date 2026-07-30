@@ -126,12 +126,12 @@ public struct Rng
 	/// <summary>
 	/// Get a random <see cref="short"/> between 0 (inclusive) and <paramref name="max"/> (exclusive)
 	/// </summary>
-	public short Short(short max) => (short)(max != 0 ? Math.Abs(Short()) % max : 0);
+	public short Short(short max) => max > 0 ? (short)(U64() % (ulong)max) : (short)0;
 
 	/// <summary>
 	/// Get a random <see cref="short"/> between <paramref name="min"/> (inclusive) and <paramref name="max"/> (exclusive)
 	/// </summary>
-	public short Short(short min, short max) => (short)(min + Short((short)(max - min)));
+	public short Short(short min, short max) => max > min ? (short)(min + (long)(U64() % (ulong)(max - min))) : min;
 
 	/// <summary>
 	/// Get a random <see cref="sbyte"/> from all possible values
@@ -141,12 +141,12 @@ public struct Rng
 	/// <summary>
 	/// Get a random <see cref="sbyte"/> between 0 (inclusive) and <paramref name="max"/> (exclusive)
 	/// </summary>
-	public sbyte SByte(sbyte max) => (sbyte)(max != 0 ? Math.Abs(SByte()) % max : 0);
+	public sbyte SByte(sbyte max) => max > 0 ? (sbyte)(U64() % (ulong)max) : (sbyte)0;
 
 	/// <summary>
 	/// Get a random <see cref="sbyte"/> between <paramref name="min"/> (inclusive) and <paramref name="max"/> (exclusive)
 	/// </summary>
-	public sbyte SByte(sbyte min, sbyte max) => (sbyte)(min + SByte((sbyte)(max - min)));
+	public sbyte SByte(sbyte min, sbyte max) => max > min ? (sbyte)(min + (long)(U64() % (ulong)(max - min))) : min;
 
 	/// <summary>
 	/// Get a random <see cref="double"/> from all possible values
