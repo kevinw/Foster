@@ -89,7 +89,7 @@ public struct RectInt(int x, int y, int w, int h) : IConvexShape, IEquatable<Rec
 	public readonly LineInt TopLine => new(TopLeft, TopRight);
 	public readonly LineInt BottomLine => new(BottomRight, BottomLeft);
 
-	public EdgeEnumerable Edges => new(this);
+	readonly public EdgeEnumerable Edges => new(this);
 
 	public readonly struct EdgeEnumerable(RectInt rect) : IEnumerable<LineInt>
 	{
@@ -126,10 +126,10 @@ public struct RectInt(int x, int y, int w, int h) : IConvexShape, IEquatable<Rec
 			index = -1;
 		}
 
-		public LineInt Current => current;
-		LineInt IEnumerator<LineInt>.Current => current;
-		object IEnumerator.Current => current;
-		public void Dispose() { }
+		readonly public LineInt Current => current;
+		readonly LineInt IEnumerator<LineInt>.Current => current;
+		readonly object IEnumerator.Current => current;
+		readonly public void Dispose() { }
 	}
 
 	#endregion
@@ -915,9 +915,9 @@ public struct RectInt(int x, int y, int w, int h) : IConvexShape, IEquatable<Rec
 
 	public struct PointEnumerator(RectInt rect) : IEnumerator<Point2>
 	{
-		private readonly int    total = rect.Area;
-		private          int    index = -1;
-		private          Point2 current;
+		private readonly int total = rect.Area;
+		private int index = -1;
+		private Point2 current;
 
 		public bool MoveNext()
 		{
@@ -936,10 +936,10 @@ public struct RectInt(int x, int y, int w, int h) : IConvexShape, IEquatable<Rec
 			index = -1;
 		}
 
-		public Point2 Current => current;
-		Point2 IEnumerator<Point2>.Current => current;
-		object IEnumerator.Current => current;
-		public void Dispose() { }
+		readonly public Point2 Current => current;
+		readonly Point2 IEnumerator<Point2>.Current => current;
+		readonly object IEnumerator.Current => current;
+		readonly public void Dispose() { }
 	}
 
 	#endregion

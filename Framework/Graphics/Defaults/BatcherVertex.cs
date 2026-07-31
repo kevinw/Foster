@@ -39,10 +39,10 @@ public struct BatcherVertex : IVertex
 
 	public readonly VertexFormat Format => format;
 
-	private static readonly VertexFormat format = new([
+	private static readonly VertexFormat format = VertexFormat.Create<BatcherVertex>(
 		new(0, VertexType.Float2, false),
 		new(1, VertexType.Float2, false),
 		new(2, VertexType.UByte4, true),
 		new(3, VertexType.UByte4, true)
-	]);
+	);
 }

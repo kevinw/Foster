@@ -1,0 +1,169 @@
+<Project>
+  <!--
+    Foster Shader Compilation MSBuild Targets
+
+    Compiles HLSL shaders to platform-specific formats.
+    Uses MSBuild batching for parallel compilation and incremental builds.
+
+    Properties (set before importing):
+      ShaderSourceDir       - Directory containing .hlsl files (required)
+      ShaderOutputDir       - Output directory (default: $(ShaderSourceDir)/Compiled)
+      ShaderPlatform        - Target: windows, mac, linux, web (auto-detected if not set)
+      ShaderIncludeDir      - Include directory for HLSL (default: $(ShaderSourceDir))
+      ShaderCrossPath       - Path to shadercross executable (default: looks on PATH)
+      DxcPath               - Path to dxc executable (default: looks on PATH)
+      NagaPath              - Path to naga executable (default: looks on PATH)
+
+    Targets:
+      CompileShaders        - Compile all shaders for current platform
+      CleanShaders          - Remove compiled shaders
+  -->
+
+  <PropertyGroup>
+    <ShaderOutputDir Condition="'$(ShaderOutputDir)' == ''">$(ShaderSourceDir)/Compiled</ShaderOutputDir>
+    <ShaderIncludeDir Condition="'$(ShaderIncludeDir)' == ''">$(ShaderSourceDir)</ShaderIncludeDir>
+
+    <!-- Auto-detect platform if not set -->
+    <ShaderPlatform Condition="'$(ShaderPlatform)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">windows</ShaderPlatform>
+    <ShaderPlatform Condition="'$(ShaderPlatform)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">mac</ShaderPlatform>
+    <ShaderPlatform Condition="'$(ShaderPlatform)' == '' And $([MSBuild]::IsOSPlatform('Linux'))">linux</ShaderPlatform>
+
+    <!-- Output extension per platform -->
+    <ShaderOutputExtension Condition="'$(ShaderPlatform)' == 'windows'">dxil</ShaderOutputExtension>
+    <ShaderOutputExtension Condition="'$(ShaderPlatform)' == 'mac'">msl</ShaderOutputExtension>
+    <ShaderOutputExtension Condition="'$(ShaderPlatform)' == 'linux'">spv</ShaderOutputExtension>
+    <ShaderOutputExtension Condition="'$(ShaderPlatform)' == 'web'">wgsl</ShaderOutputExtension>
+
+    <!-- Tool paths - default to bundled binaries in Foster/tools/, can be overridden -->
+    <ShaderCrossPath Condition="'$(ShaderCrossPath)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">$(MSBuildThisFileDirectory)../tools/windows/shadercross.exe</ShaderCrossPath>
+    <ShaderCrossPath Condition="'$(ShaderCrossPath)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">$(MSBuildThisFileDirectory)../tools/macos/shadercross</ShaderCrossPath>
+    <ShaderCrossPath Condition="'$(ShaderCrossPath)' == '' And $([MSBuild]::IsOSPlatform('Linux'))">$(MSBuildThisFileDirectory)../tools/linux/shadercross</ShaderCrossPath>
+    <ShaderCrossPath Condition="'$(ShaderCrossPath)' == ''">shadercross</ShaderCrossPath>
+    <DxcPath Condition="'$(DxcPath)' == ''">dxc</DxcPath>
+    <NagaPath Condition="'$(NagaPath)' == ''">naga</NagaPath>
+  </PropertyGroup>
+
+  <!-- Shader source files - vertex and fragment from all .hlsl except Common.hlsl -->
+  <ItemGroup Condition="'$(ShaderSourceDir)' != ''">
+    <_ShaderVertex Include="$(ShaderSourceDir)/*.hlsl" Exclude="$(ShaderSourceDir)/Common.hlsl">
+      <Stage>vertex</Stage>
+      <EntryPoint>vertex_main</EntryPoint>
+      <DxcProfile>vs_6_0</DxcProfile>
+    </_ShaderVertex>
+
+    <_ShaderFragment Include="$(ShaderSourceDir)/*.hlsl" Exclude="$(ShaderSourceDir)/Common.hlsl">
+      <Stage>fragment</Stage>
+      <EntryPoint>fragment_main</EntryPoint>
+      <DxcProfile>ps_6_0</DxcProfile>
+    </_ShaderFragment>
+
+    <_ShaderCompute Include="$(ShaderSourceDir)/Compute/*.hlsl">
+      <Stage>compute</Stage>
+      <EntryPoint>compute_main</EntryPoint>
+      <DxcProfile>cs_6_0</DxcProfile>
+    </_ShaderCompute>
+
+    <_ShaderCompile Include="@(_ShaderVertex);@(_ShaderFragment);@(_ShaderCompute)" />
+    <_ShaderInclude Include="$(ShaderSourceDir)/Common.hlsl" Condition="Exists('$(ShaderSourceDir)/Common.hlsl')" />
+  </ItemGroup>
+
+  <!-- Compute output paths -->
+  <ItemGroup>
+    <_ShaderCompile Update="@(_ShaderCompile)">
+      <OutputBase>$(ShaderOutputDir)/$([System.IO.Path]::GetFileNameWithoutExtension('%(Identity)')).%(Stage)</OutputBase>
+      <OutputFile>$(ShaderOutputDir)/$([System.IO.Path]::GetFileNameWithoutExtension('%(Identity)')).%(Stage).$(ShaderOutputExtension)</OutputFile>
+      <SpvTemp>$(ShaderOutputDir)/$([System.IO.Path]::GetFileNameWithoutExtension('%(Identity)')).%(Stage).spv.tmp</SpvTemp>
+    </_ShaderCompile>
+  </ItemGroup>
+
+  <!-- Main target - dispatches to platform-specific target -->
+  <Target Name="CompileShaders"
+          DependsOnTargets="_EnsureShaderOutputDir;_CompileShadersWindows;_CompileShadersMacLinux;_CompileShadersWeb"
+          Condition="'$(ShaderPlatform)' != ''">
+    <Message Importance="high" Text="Shader compilation complete for $(ShaderPlatform)." />
+  </Target>
+
+  <Target Name="_EnsureShaderOutputDir">
+    <MakeDir Directories="$(ShaderOutputDir)" />
+  </Target>
+
+  <!--
+    Windows/DXIL: HLSL -> SPIRV -> DXIL via SDL_shadercross (two-step)
+    Must use shadercross for D3D12 compatibility (consistent semantic renumbering)
+  -->
+  <Target Name="_CompileShadersWindows"
+          Condition="'$(ShaderPlatform)' == 'windows'"
+          Inputs="@(_ShaderCompile);@(_ShaderInclude)"
+          Outputs="@(_ShaderCompile->'%(OutputFile)')">
+
+    <Message Importance="high" Text="Compiling %(_ShaderCompile.Identity) [%(_ShaderCompile.Stage)] -> dxil (via shadercross)" />
+
+    <!-- Step 1: HLSL -> SPIRV -->
+    <Exec Command="&quot;$(ShaderCrossPath)&quot; &quot;%(_ShaderCompile.Identity)&quot; -s HLSL -t %(_ShaderCompile.Stage) -e %(_ShaderCompile.EntryPoint) -I &quot;$(ShaderIncludeDir)&quot; -o &quot;%(_ShaderCompile.SpvTemp)&quot;" />
+
+    <!-- Step 2: SPIRV -> DXIL -->
+    <Exec Command="&quot;$(ShaderCrossPath)&quot; &quot;%(_ShaderCompile.SpvTemp)&quot; -s SPIRV -d DXIL -t %(_ShaderCompile.Stage) -e %(_ShaderCompile.EntryPoint) -o &quot;%(_ShaderCompile.OutputFile)&quot;" />
+
+    <!-- Cleanup temp SPIRV -->
+    <Delete Files="%(_ShaderCompile.SpvTemp)" />
+  </Target>
+
+  <!--
+    Mac/Linux: HLSL -> SPIRV -> target format via shadercross
+  -->
+  <Target Name="_CompileShadersMacLinux"
+          Condition="'$(ShaderPlatform)' == 'mac' Or '$(ShaderPlatform)' == 'linux'"
+          Inputs="@(_ShaderCompile);@(_ShaderInclude)"
+          Outputs="@(_ShaderCompile->'%(OutputFile)')">
+
+    <Message Importance="high" Text="Compiling %(_ShaderCompile.Identity) [%(_ShaderCompile.Stage)] -> $(ShaderOutputExtension)" />
+
+    <!-- Step 1: HLSL -> SPIRV -->
+    <Exec Command="&quot;$(ShaderCrossPath)&quot; &quot;%(_ShaderCompile.Identity)&quot; -e %(_ShaderCompile.EntryPoint) -t %(_ShaderCompile.Stage) -s HLSL -I &quot;$(ShaderIncludeDir)&quot; -o &quot;%(_ShaderCompile.SpvTemp)&quot;" />
+
+    <!-- Step 2: SPIRV -> Target format (MSL) -->
+    <Exec Command="&quot;$(ShaderCrossPath)&quot; &quot;%(_ShaderCompile.SpvTemp)&quot; -e %(_ShaderCompile.EntryPoint) -t %(_ShaderCompile.Stage) -s SPIRV -o &quot;%(_ShaderCompile.OutputFile)&quot;"
+          Condition="'$(ShaderPlatform)' == 'mac'" />
+
+    <!-- For Linux, just rename the SPIRV temp to final output -->
+    <Move SourceFiles="%(_ShaderCompile.SpvTemp)" DestinationFiles="%(_ShaderCompile.OutputFile)"
+          Condition="'$(ShaderPlatform)' == 'linux'" />
+
+    <!-- Cleanup temp SPIRV (for Mac) -->
+    <Delete Files="%(_ShaderCompile.SpvTemp)" Condition="'$(ShaderPlatform)' == 'mac'" />
+  </Target>
+
+  <!--
+    Web/WGSL: HLSL -> SPIRV (via dxc) -> WGSL (via naga)
+  -->
+  <Target Name="_CompileShadersWeb"
+          Condition="'$(ShaderPlatform)' == 'web'"
+          Inputs="@(_ShaderCompile);@(_ShaderInclude)"
+          Outputs="@(_ShaderCompile->'%(OutputFile)')">
+
+    <Message Importance="high" Text="Compiling %(_ShaderCompile.Identity) [%(_ShaderCompile.Stage)] -> wgsl" />
+
+    <!-- Step 1: HLSL -> SPIRV via DXC -->
+    <!-- Shift samplers off the texture/storage-buffer binding range in every space they appear:
+         space2 = fragment-stage samplers, space0 = vertex/compute-stage samplers. Without the
+         space0 shift, a Texture2D (t0) and its SamplerState (s0) collide at binding 0 and naga
+         rejects the module ("Bindings for [N] conflict with other resource"). -->
+    <Exec Command="&quot;$(DxcPath)&quot; -spirv -T %(_ShaderCompile.DxcProfile) -E %(_ShaderCompile.EntryPoint) -I &quot;$(ShaderIncludeDir)&quot; -D BROWSER=1 -fvk-s-shift 100 2 -fvk-s-shift 100 0 &quot;%(_ShaderCompile.Identity)&quot; -Fo &quot;%(_ShaderCompile.SpvTemp)&quot;" />
+
+    <!-- Step 2: SPIRV -> WGSL via naga -->
+    <Exec Command="&quot;$(NagaPath)&quot; --entry-point %(_ShaderCompile.EntryPoint) --input-kind spv &quot;%(_ShaderCompile.SpvTemp)&quot; &quot;%(_ShaderCompile.OutputFile)&quot;" />
+
+    <!-- Cleanup -->
+    <Delete Files="%(_ShaderCompile.SpvTemp)" />
+  </Target>
+
+  <!-- Clean target -->
+  <Target Name="CleanShaders">
+    <Delete Files="@(_ShaderCompile->'%(OutputBase).spv')" />
+    <Delete Files="@(_ShaderCompile->'%(OutputBase).msl')" />
+    <Delete Files="@(_ShaderCompile->'%(OutputBase).dxil')" />
+    <Delete Files="@(_ShaderCompile->'%(OutputBase).wgsl')" />
+    <Delete Files="@(_ShaderCompile->'%(SpvTemp)')" />
+  </Target>
+
+</Project>

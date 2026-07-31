@@ -208,8 +208,18 @@ public class Batcher : IDisposable
 		else
 			size = new Point2(target.WidthInPixels, target.HeightInPixels);
 
-		var matrix = Matrix4x4.CreateOrthographicOffCenter(0, size.X, size.Y, 0, 0, float.MaxValue);
+		var matrix = CreateProjectionMatrix(size);
 		Render(target, matrix, viewport, scissor);
+	}
+
+	public static Matrix4x4 CreateProjectionMatrix(Point2 size)
+	{
+		var matrix = Matrix4x4.CreateOrthographicOffCenter(0, size.X, size.Y, 0, 0, float.MaxValue);
+#if BROWSER
+		// Use one coordinate convention for browser render targets and the canvas.
+		matrix = Matrix4x4.CreateOrthographicOffCenter(0, size.X, 0, size.Y, 0, float.MaxValue);
+#endif
+		return matrix;
 	}
 
 	/// <summary>
@@ -279,7 +289,6 @@ public class Batcher : IDisposable
 
 		// set Vertex Matrix, always assumed to be in slot 0 as the first data
 		mat.Vertex.SetUniformBuffer(matrix);
-
 		GraphicsDevice.Draw(new(target, mesh, mat)
 		{
 			Viewport = viewport,

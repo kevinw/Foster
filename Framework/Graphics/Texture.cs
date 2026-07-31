@@ -152,6 +152,37 @@ public class Texture : IGraphicResource
 	}
 
 	/// <summary>
+	/// Asynchronously requests a copy of the entire texture back to the CPU.
+	/// Non-stalling: poll <see cref="TextureDownload{T}.TryRead"/> on a later
+	/// frame (at least one later) to retrieve it. See the region overload for
+	/// details on reusing a slot.
+	/// </summary>
+	public TextureDownload<T> RequestDownload<T>(TextureDownload<T> download = default) where T : unmanaged
+		=> RequestDownload(new RectInt(0, 0, Width, Height), download);
+
+	/// <summary>
+	/// Asynchronously requests a copy of a region of the texture back to the
+	/// CPU. This is non-stalling, but the result is not available immediately -
+	/// call <see cref="TextureDownload{T}.TryRead"/> on a later frame (at least
+	/// one frame later) to retrieve it.
+	///
+	/// Pass the handle returned from a previous call back in via
+	/// <paramref name="download"/> to reuse its slot (and staging buffer);
+	/// otherwise pass <c>default</c> to allocate a new one.
+	/// </summary>
+	public TextureDownload<T> RequestDownload<T>(RectInt sourceRegion, TextureDownload<T> download = default) where T : unmanaged
+	{
+		if (IsDisposed)
+			throw new Exception("Resource is Disposed");
+		if (sourceRegion.Left < 0 || sourceRegion.Top < 0 || sourceRegion.Bottom > Height || sourceRegion.Right > Width)
+			throw new Exception("Source region is out of range");
+
+		var slot = download.Slot != 0 ? download.Slot : GraphicsDevice.AllocateDownloadSlot();
+		GraphicsDevice.DownloadTextureData(Resource, sourceRegion, Format.Size(), slot);
+		return new TextureDownload<T>(GraphicsDevice, slot);
+	}
+
+	/// <summary>
 	/// Blits the contents of this Texture to another Texture
 	/// </summary>
 	public void Blit(RectInt sourceRect, Texture destination, RectInt destinationRect, TextureFilter filter)
@@ -193,5 +224,31 @@ public class Texture : IGraphicResource
 
 			disposed = true;
 		}
+	}
+}
+
+/// <summary>
+/// A handle to an in-flight or completed asynchronous GPU texture download,
+/// returned by <see cref="Texture.RequestDownload{T}(TextureDownload{T})"/>. A
+/// default-initialized handle has no associated download and
+/// <see cref="TryRead"/> always returns false for it.
+/// </summary>
+public readonly struct TextureDownload<T>(GraphicsDevice graphicsDevice, int downloadSlot) where T : unmanaged
+{
+	internal readonly int Slot = downloadSlot;
+
+	/// <summary>
+	/// Attempts to read back the most recently downloaded data for this handle,
+	/// tightly packed into <paramref name="dest"/>. Returns false if no download
+	/// has completed for this handle yet (e.g. the GPU copy and async map are
+	/// still in flight) - retry on a later frame.
+	/// </summary>
+	public unsafe bool TryRead(Span<T> dest)
+	{
+		if (Slot == 0)
+			return false;
+
+		fixed (T* ptr = dest)
+			return graphicsDevice.TryReadTextureDownload(Slot, new nint(ptr), dest.Length * Unsafe.SizeOf<T>());
 	}
 }

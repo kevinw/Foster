@@ -273,6 +273,12 @@ public struct Rect(float x, float y, float w, float h) : IConvexShape, IEquatabl
 
 	}
 
+	public static Rect CenteredAt(in Vector2 center, in Vector2 size) {
+		var rect = new Rect(0, 0, size.X, size.Y);
+		rect.Center = center;
+		return rect;
+	}
+
 	#region Collision
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]

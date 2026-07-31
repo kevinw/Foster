@@ -10,6 +10,10 @@ public sealed class Window : IDrawableTarget
 	internal readonly uint ID;
 
 	private string title;
+#if BROWSER
+	private Point2 browserSize;
+	private bool browserFullscreen;
+#endif
 	private readonly App app;
 	private readonly Exception closedWindowException = new("The Window has been Closed");
 	private readonly Exception notOnMainThreadException = new("This method may only be called from the Main thread");
@@ -94,16 +98,25 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return browserSize;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_GetWindowSize(Handle, out int w, out int h);
 			return new(w, h);
+#endif
 		}
 		set
 		{
+#if BROWSER
+			browserSize = value;
+			BrowserWebGPU.ResizeCanvas(value.X, value.Y);
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_SetWindowSize(Handle, value.X, value.Y);
+#endif
 		}
 	}
 
@@ -124,10 +137,14 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return new(BrowserWebGPU.GetCanvasWidth(), BrowserWebGPU.GetCanvasHeight());
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_GetWindowSizeInPixels(Handle, out int w, out int h);
 			return new(w, h);
+#endif
 		}
 	}
 
@@ -138,6 +155,9 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return SizeInPixels;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			var index = SDL_GetDisplayForWindow(Handle);
@@ -145,6 +165,7 @@ public sealed class Window : IDrawableTarget
 			if (mode == null)
 				return Point2.Zero;
 			return new(mode->w, mode->h);
+#endif
 		}
 	}
 
@@ -155,6 +176,9 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return Vector2.One;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			var scale = SDL_GetWindowDisplayScale(Handle);
@@ -164,6 +188,7 @@ public sealed class Window : IDrawableTarget
 				return new(WidthInPixels / (float)Width, HeightInPixels / (float)Height);
 			}
 			return Vector2.One * scale;
+#endif
 		}
 	}
 
@@ -174,11 +199,15 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return InputProviderBrowser.MousePosition;
+#else
 			// use global mouse position so we can get it as it moves outside the window
 			SDL_GetGlobalMouseState(out var mouseX, out var mouseY);
 
 			// scale it to the pixel coords
 			return (new Vector2(mouseX, mouseY) - Position) / (Vector2)Size * (Vector2)SizeInPixels;
+#endif
 		}
 	}
 
@@ -189,15 +218,23 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return browserFullscreen;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			return (SDL_GetWindowFlags(Handle) & SDL_WindowFlags.SDL_WINDOW_FULLSCREEN) != 0;
+#endif
 		}
 		set
 		{
+#if BROWSER
+			browserFullscreen = value;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_SetWindowFullscreen(Handle, value);
+#endif
 		}
 	}
 
@@ -217,6 +254,25 @@ public sealed class Window : IDrawableTarget
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_SetWindowResizable(Handle, value);
+		}
+	}
+
+	/// <summary>
+	/// Whether the Window should stay above other Windows.
+	/// </summary>
+	public bool AlwaysOnTop
+	{
+		get
+		{
+			if (Handle == nint.Zero)
+				throw closedWindowException;
+			return (SDL_GetWindowFlags(Handle) & SDL_WindowFlags.SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+		}
+		set
+		{
+			if (Handle == nint.Zero)
+				throw closedWindowException;
+			SDL_SetWindowAlwaysOnTop(Handle, value);
 		}
 	}
 
@@ -321,7 +377,13 @@ public sealed class Window : IDrawableTarget
 		this.app = app;
 		this.title = title;
 		GraphicsDevice = app.GraphicsDevice;
+#if BROWSER
+		browserSize = new(width, height);
+		browserFullscreen = fullscreen;
 
+		ID = 1;
+		BrowserWebGPU.ResizeCanvas(width, height);
+#else
 		var windowFlags =
 			SDL_WindowFlags.SDL_WINDOW_HIGH_PIXEL_DENSITY;
 		if (!app.Running)
@@ -335,7 +397,7 @@ public sealed class Window : IDrawableTarget
 		if (Handle == nint.Zero)
 			throw App.CreateExceptionFromSDL(nameof(SDL_CreateWindow));
 		ID = SDL_GetWindowID(Handle);
-
+#endif
 		app.WindowCreated(this);
 	}
 
@@ -373,6 +435,9 @@ public sealed class Window : IDrawableTarget
 	/// </summary>
 	public void SetMouseRelativeMode(bool enabled)
 	{
+#if BROWSER
+		return;
+#else
 		if (enabled == SDL_GetWindowRelativeMouseMode(Handle))
 			return;
 
@@ -380,6 +445,7 @@ public sealed class Window : IDrawableTarget
 			Log.Warning($"Failed to set Mouse Relative Mode: {SDL_GetError()}");
 
 		SDL_WarpMouseInWindow(Handle, Width / 2, Height / 2);
+#endif
 	}
 
 	/// <summary>
@@ -387,10 +453,14 @@ public sealed class Window : IDrawableTarget
 	/// </summary>
 	public void SetMousePosition(Vector2 position)
 	{
+#if BROWSER
+		return;
+#else
 		SDL_WarpMouseInWindow(Handle, 
 			position.X * (Width / (float)WidthInPixels),
 			position.Y * (Height / (float)HeightInPixels)
 		);
+#endif
 	}
 
 	/// <summary>
@@ -504,20 +574,32 @@ public sealed class Window : IDrawableTarget
 
 	internal void Show()
 	{
+#if BROWSER
+		return;
+#else
 		SDL_ShowWindow(Handle);
 		SDL_SetWindowFullscreenMode(Handle, ref Unsafe.NullRef<SDL_DisplayMode>());
 		SDL_SetWindowBordered(Handle, true);
 		SDL_RaiseWindow(Handle);
+#endif
 	}
 
 	internal void Hide()
 	{
+#if BROWSER
+		return;
+#else
 		SDL_HideWindow(Handle);
+#endif
 	}
 
 	private void ApplyTitle()
 	{
+#if BROWSER
+		BrowserDocument.SetTitle(title);
+#else
 		if (Handle != nint.Zero)
 			SDL_SetWindowTitle(Handle, title);
+#endif
 	}
 }

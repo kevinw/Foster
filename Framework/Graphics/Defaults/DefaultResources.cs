@@ -10,7 +10,13 @@ public class DefaultResources
 	/// The Default Material used for the <seealso cref="BatchMaterial"/>.
 	/// Expects <seealso cref="BatcherVertex"/> Vertices.
 	/// </summary>
-	public Material BatchMaterial => batcher ??= Create(device, "Batcher", 0, 1, 1, 0);
+	public Material BatchMaterial => batcher ??= Create(device, "Batcher", 0, 1, 1,
+#if BROWSER
+		1
+#else
+		0
+#endif
+	);
 
 	/// <summary>
 	/// A simple 2D Textured Shader.

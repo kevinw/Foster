@@ -22,6 +22,11 @@ public sealed class InputState
 	public readonly MouseState Mouse = new();
 
 	/// <summary>
+	/// The Touch State
+	/// </summary>
+	public readonly TouchState Touch = new();
+
+	/// <summary>
 	/// The Controllers state
 	/// </summary>
 	public readonly ControllerState[] Controllers =
@@ -61,6 +66,7 @@ public sealed class InputState
 	{
 		Keyboard.Clear();
 		Mouse.Clear();
+		Touch.Clear();
 		foreach (var it in Controllers)
 			it.Clear();
 	}
@@ -74,6 +80,7 @@ public sealed class InputState
 		}
 		Keyboard.Step(time);
 		Mouse.Step(time);
+		Touch.Step(time);
 	}
 
 	internal void Copy(InputState other)
@@ -86,5 +93,6 @@ public sealed class InputState
 
 		Keyboard.Copy(other.Keyboard);
 		Mouse.Copy(other.Mouse);
+		Touch.Copy(other.Touch);
 	}
 }

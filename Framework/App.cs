@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using static SDL3.SDL;
 
@@ -70,6 +71,11 @@ public enum AppFlags
 	/// Doesn't log Foster's header (version number, gpu, SDL version, etc)
 	/// </summary>
 	NoHeaderLog = 1 << 2,
+
+	/// <summary>
+	/// Run the Application in Headless mode, without a Window or GPU device.
+	/// </summary>
+	Headless = 1 << 3,
 }
 
 /// <summary>
@@ -77,7 +83,7 @@ public enum AppFlags
 /// Call <see cref="Run"/> to begin the main game update loop.<br/>
 /// Note you can only have one App running at a time.
 /// </summary>
-public abstract class App : IDisposable
+public abstract partial class App : IDisposable
 {
 	/// <summary>
 	/// Foster Version Number
@@ -105,9 +111,10 @@ public abstract class App : IDisposable
 	public UpdateMode UpdateMode;
 
 	/// <summary>
-	/// The Main Application Window
+	/// The Main Application Window.
+	/// This will be <c>null</c> in Headless mode.
 	/// </summary>
-	public readonly Window Window;
+	public Window? Window { get; private set; }
 
 	/// <summary>
 	/// All Windows open in the Application
@@ -169,12 +176,20 @@ public abstract class App : IDisposable
 	{
 		get
 		{
+			userPath ??= UserPathForApplicationName(config.ApplicationName);
+			return userPath;
+		}
+	}
+
+	public static string UserPathForApplicationName(string applicationName) {
+		#if BROWSER
+			return $"/{applicationName}";
+		#else
 			// only assign the user path if requested - calling this method may
 			// create a directory and we only want to do that if the user
 			// actually intends to use it.
-			userPath ??= SDL_GetPrefPath(string.Empty, config.ApplicationName);
-			return userPath;
-		}
+			return SDL_GetPrefPath(string.Empty, applicationName);
+		#endif
 	}
 
 	/// <summary>
@@ -185,17 +200,29 @@ public abstract class App : IDisposable
 	public Action? OnExitRequested;
 
 	private readonly AppConfig config;
+	/// <summary>
+	/// The number of simulation steps to run per render frame
+	/// when in Unthrottled Mode with graphics enabled.
+	/// Defaults to 60 (≈60× real-time at 60 FPS vsync).
+	/// </summary>
+	public int UnthrottledStepsPerFrame { get; set; } = 60;
 	private readonly Stopwatch timer = new();
 	private TimeSpan lastUpdateTime;
 	private TimeSpan fixedAccumulator;
 	private readonly int mainThreadID;
 	private readonly ConcurrentQueue<Action> mainThreadQueue = [];
-	private readonly InputProviderSDL inputProvider;
+	private readonly InputProvider inputProvider;
 	private string? userPath = null;
+#if !BROWSER
 	private readonly SDL_EventFilter eventFilter;
+#endif
 	private readonly List<Window> windows = [];
 	private readonly Queue<Window> windowDestroyingQueue = [];
 	private Cursor? currentCursor;
+#if BROWSER
+	private static App? browserRunningApp;
+	private bool browserStarted;
+#endif
 
 	internal readonly Exception NotRunningException = new("The Application is not Running");
 	internal readonly Exception DisposedException = new("The Application is Disposed");
@@ -214,47 +241,94 @@ public abstract class App : IDisposable
 		// log info
 		if (!config.Flags.Has(AppFlags.NoHeaderLog))
 		{
-			var sdlv = SDL_GetVersion();
-			Log.Info($"Foster: v{FosterVersion.Major}.{FosterVersion.Minor}.{FosterVersion.Build}");
-			Log.Info($"SDL: v{sdlv / 1000000}.{(sdlv / 1000) % 1000}.{sdlv % 1000}");
-			Log.Info($"Platform: {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})");
-			Log.Info($"Framework: {RuntimeInformation.FrameworkDescription}");
+			var startupLogs = new List<string>();
+			startupLogs.Add($"Foster: v{FosterVersion.Major}.{FosterVersion.Minor}.{FosterVersion.Build}");
+#if BROWSER
+			startupLogs.Add("Browser WASM");
+#else
+			if (!config.Flags.Has(AppFlags.Headless))
+			{
+				var sdlv = SDL_GetVersion();
+				startupLogs.Add($"SDL: v{sdlv / 1000000}.{(sdlv / 1000) % 1000}.{sdlv % 1000}");
+			}
+			startupLogs.Add($"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})");
+#endif
+			startupLogs.Add($"{RuntimeInformation.FrameworkDescription}");
+			Log.Info(string.Join(" | ", startupLogs));
 		}
+
 
 		mainThreadID = Environment.CurrentManagedThreadId;
 
-		// set SDL logging method
-		SDL_SetLogOutputFunction(HandleLogFromSDL, IntPtr.Zero);
-
-		// by default allow controller presses while unfocused,
-		// let game decide if it should handle them
-		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
-
-		// initialize SDL3
+		if (config.Flags.Has(AppFlags.Headless))
 		{
-			var initFlags =
-				SDL_InitFlags.SDL_INIT_VIDEO | SDL_InitFlags.SDL_INIT_TIMER | SDL_InitFlags.SDL_INIT_EVENTS |
-				SDL_InitFlags.SDL_INIT_JOYSTICK | SDL_InitFlags.SDL_INIT_GAMEPAD;
-
-			if (!SDL_Init(initFlags))
-				throw CreateExceptionFromSDL(nameof(SDL_Init));
+			UpdateMode = config.UpdateMode ?? UpdateMode.UnlockedStep();
+			inputProvider = new InputProviderHeadless();
+			Input = inputProvider.Input;
+			FileSystem = new(this);
+			GraphicsDevice = new GraphicsDeviceHeadless(this);
+			GraphicsDevice.CreateDevice(config.Flags);
+			Window = null;
+#if !BROWSER
+			eventFilter = default!;
+#endif
 		}
+#if BROWSER
+		else
+		{
+			UpdateMode = config.UpdateMode ?? UpdateMode.UnlockedStep();
+			inputProvider = new InputProviderBrowser(this);
+			Input = inputProvider.Input;
+			FileSystem = new(this);
+			GraphicsDevice = new GraphicsDeviceWebGPU(this);
+			GraphicsDevice.CreateDevice(config.Flags);
+			Window = new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable);
+		}
+#else
+		else
+		{
+			// set SDL logging method
+			if (OperatingSystem.IsIOS())
+				SDL_SetLogOutputFunctionAot(&HandleLogFromSDLAot, nint.Zero);
+			else
+				SDL_SetLogOutputFunction(HandleLogFromSDL, IntPtr.Zero);
 
-		// setup event watcher
-		eventFilter = EventWatcher;
-		SDL_AddEventWatch(eventFilter, nint.Zero);
+			SDL_SetMainReady();
 
-		// Create Modules
-		UpdateMode = config.UpdateMode ?? UpdateMode.FixedStep(60);
-		inputProvider = new(this);
-		Input = inputProvider.Input;
-		FileSystem = new(this);
-		GraphicsDevice = new GraphicsDeviceSDL(this, config.PreferredGraphicsDriver);
-		GraphicsDevice.CreateDevice(config.Flags);
-		Window = new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable);
+			// by default allow controller presses while unfocused,
+			// let game decide if it should handle them
+			SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+			if (OperatingSystem.IsIOS())
+				SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 
-		// try to load default SDL gamepad mappings
-		Input.AddDefaultSDLGamepadMappings(AppContext.BaseDirectory);
+			// initialize SDL3
+			{
+				var initFlags =
+					SDL_InitFlags.SDL_INIT_VIDEO | SDL_InitFlags.SDL_INIT_TIMER | SDL_InitFlags.SDL_INIT_EVENTS |
+					SDL_InitFlags.SDL_INIT_JOYSTICK | SDL_InitFlags.SDL_INIT_GAMEPAD;
+
+				if (!SDL_Init(initFlags))
+					throw CreateExceptionFromSDL(nameof(SDL_Init));
+			}
+
+			// setup event watcher
+			eventFilter = EventWatcher;
+			if (!OperatingSystem.IsIOS())
+				SDL_AddEventWatch(eventFilter, nint.Zero);
+
+			// Create Modules
+			UpdateMode = config.UpdateMode ?? UpdateMode.FixedStep(60);
+			inputProvider = new InputProviderSDL(this);
+			Input = inputProvider.Input;
+			FileSystem = new(this);
+			GraphicsDevice = new GraphicsDeviceSDL(this, config.PreferredGraphicsDriver);
+			GraphicsDevice.CreateDevice(config.Flags);
+			Window = new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable);
+
+			// try to load default SDL gamepad mappings
+			Input.AddDefaultSDLGamepadMappings(AppContext.BaseDirectory);
+		}
+#endif
 	}
 
 	~App() => Dispose(false);
@@ -284,11 +358,15 @@ public abstract class App : IDisposable
 
 				GraphicsDevice.Shutdown();
 				GraphicsDevice.DestroyDevice();
-				inputProvider.CloseDevices();
+				if (inputProvider is InputProviderSDL sdlInputProvider)
+					sdlInputProvider.CloseDevices();
 				mainThreadQueue.Clear();
 			}
 
-			SDL_Quit();
+#if !BROWSER
+			if (!config.Flags.Has(AppFlags.Headless))
+				SDL_Quit();
+#endif
 			Disposed = true;
 		}
 	}
@@ -331,6 +409,18 @@ public abstract class App : IDisposable
 		fixedAccumulator = TimeSpan.Zero;
 		timer.Restart();
 
+#if BROWSER
+		if (browserStarted)
+			throw new Exception("Browser application is already started");
+
+		browserStarted = true;
+		browserRunningApp = this;
+		foreach (var window in windows)
+			window.Show();
+		Startup();
+		BrowserWebGPU.StartRenderLoop(BrowserFrame);
+		return;
+#else
 		// wrap in a try/finally so if anything here throws, Dispose
 		// won't then also throw due to the Application still "Running"
 		try
@@ -354,14 +444,80 @@ public abstract class App : IDisposable
 			Shutdown();
 			foreach (var window in windows)
 				window.Hide();
-			inputProvider.CloseDevices();
+			if (inputProvider is InputProviderSDL sdlInputProvider)
+				sdlInputProvider.CloseDevices();
 		}
 		finally
 		{
 			Running = false;
 			Exiting = false;
 		}
+#endif
 	}
+
+#if BROWSER
+	// Synchronous per-frame callback invoked by JS from inside requestAnimationFrame
+	// (the ?syncTick path). Runs one frame and returns whether to keep looping.
+	// Mirrors RunBrowserLoop's shutdown sequence on exit.
+	private bool BrowserFrame()
+	{
+		try
+		{
+			if (!Exiting)
+				Tick();
+		}
+		catch (Exception exception)
+		{
+			Log.Error(exception.ToString());
+			throw;
+		}
+
+		if (!Exiting)
+			return true;
+
+		while (mainThreadQueue.TryDequeue(out var action))
+			action.Invoke();
+		Shutdown();
+		foreach (var window in windows)
+			window.Hide();
+		Running = false;
+		Exiting = false;
+		if (ReferenceEquals(browserRunningApp, this))
+			browserRunningApp = null;
+		return false;
+	}
+
+	private async Task RunBrowserLoop()
+	{
+		try
+		{
+			while (!Exiting)
+			{
+				await BrowserWebGPU.WaitForAnimationFrame();
+				Tick();
+			}
+
+			while (mainThreadQueue.TryDequeue(out var action))
+				action.Invoke();
+
+			Shutdown();
+			foreach (var window in windows)
+				window.Hide();
+		}
+		catch (Exception exception)
+		{
+			Log.Error(exception.ToString());
+			throw;
+		}
+		finally
+		{
+			Running = false;
+			Exiting = false;
+			if (ReferenceEquals(browserRunningApp, this))
+				browserRunningApp = null;
+		}
+	}
+#endif
 
 	/// <summary>
 	/// Notifies the Application to Exit.
@@ -449,7 +605,9 @@ public abstract class App : IDisposable
 		while (windowDestroyingQueue.TryDequeue(out var window))
 		{
 			GraphicsDevice.WindowDestroyed(window);
+#if !BROWSER
 			SDL_DestroyWindow(window.Handle);
+#endif
 			window.Destroyed();
 		}
 	}
@@ -461,8 +619,10 @@ public abstract class App : IDisposable
 			Time = Time.Advance(delta);
 
 			// warp mouse to center of the window if Relative Mode is enabled
-			if (SDL_GetWindowRelativeMouseMode(Window.Handle) && Window.Focused)
+#if !BROWSER
+			if (Window != null && SDL_GetWindowRelativeMouseMode(Window.Handle) && Window.Focused)
 				SDL_WarpMouseInWindow(Window.Handle, Window.Width / 2, Window.Height / 2);
+#endif
 
 			inputProvider.Update(Time);
 			PollEvents();
@@ -515,6 +675,35 @@ public abstract class App : IDisposable
 					break;
 			}
 		}
+		// update in Unthrottled Mode (back-to-back fixed steps, no wall-clock wait)
+		else if (update.Mode == UpdateMode.Modes.Unthrottled)
+		{
+			// Headless: pure tight loop — no rendering
+			if (config.Flags.Has(AppFlags.Headless))
+			{
+				while (!Exiting)
+					Step(update.FixedTargetTime);
+			}
+			else
+			{
+			// With graphics (+ vsync): run a fixed number of simulation
+			// steps per render frame, then present.  Default 60 steps
+			// gives ~60× real-time at 60 FPS with vsync on.
+			while (!Exiting)
+			{
+				int steps = UnthrottledStepsPerFrame;
+				for (int i = 0; i < steps && !Exiting; i++)
+					Step(update.FixedTargetTime);
+
+				Time = Time.AdvanceRenderFrame();
+				Render();
+				var presentStart = Stopwatch.GetTimestamp();
+				GraphicsDevice.Present();
+				GraphicsDevice.LastPresentDuration = Stopwatch.GetElapsedTime(presentStart);
+				DestroyWaitingWindows();
+				}
+			}
+		}
 		// update in Unlocked Mode
 		else
 		{
@@ -522,16 +711,18 @@ public abstract class App : IDisposable
 		}
 
 		// render
-		// TODO: should rendering be up to the user to check?
-		// should they be allowed to render while in the background?
+		if (!config.Flags.Has(AppFlags.Headless))
 		{
 			Time = Time.AdvanceRenderFrame();
 			Render();
+			var presentStart = Stopwatch.GetTimestamp();
 			GraphicsDevice.Present();
+			GraphicsDevice.LastPresentDuration = Stopwatch.GetElapsedTime(presentStart);
 		}
 
 		// destroy any queued windows
-		DestroyWaitingWindows();
+		if (!config.Flags.Has(AppFlags.Headless))
+			DestroyWaitingWindows();
 	}
 
 	private unsafe bool EventWatcher(nint userdata, SDL_Event* eventPtr)
@@ -542,80 +733,111 @@ public abstract class App : IDisposable
 			type == SDL_EventType.SDL_EVENT_WILL_ENTER_FOREGROUND ||
 			type == SDL_EventType.SDL_EVENT_DID_ENTER_BACKGROUND ||
 			type == SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND)
-			GraphicsDevice.OnEvent(type);
+			HandleAppLifecycleEvent(type);
+
+		return true;
+	}
+
+	private void HandleAppLifecycleEvent(SDL_EventType type)
+	{
+		GraphicsDevice.OnEvent(type);
 
 		if (type == SDL_EventType.SDL_EVENT_DID_ENTER_FOREGROUND)
 			OnEvent?.Invoke(AppEvents.EnterForeground);
 
 		if (type == SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND)
 			OnEvent?.Invoke(AppEvents.EnterBackground);
+	}
 
-		return true;
+	private void ProcessEvent(SDL_Event ev)
+	{
+		switch ((SDL_EventType)ev.type)
+		{
+		case SDL_EventType.SDL_EVENT_DID_ENTER_FOREGROUND:
+		case SDL_EventType.SDL_EVENT_WILL_ENTER_FOREGROUND:
+		case SDL_EventType.SDL_EVENT_DID_ENTER_BACKGROUND:
+		case SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND:
+			if (OperatingSystem.IsIOS())
+				HandleAppLifecycleEvent((SDL_EventType)ev.type);
+			break;
+
+		case SDL_EventType.SDL_EVENT_QUIT:
+			if (Running && !Exiting)
+			{
+				if (OnExitRequested != null)
+					OnExitRequested();
+				else
+					Exit();
+			}
+			break;
+
+		// input
+		case SDL_EventType.SDL_EVENT_MOUSE_BUTTON_DOWN:
+		case SDL_EventType.SDL_EVENT_MOUSE_BUTTON_UP:
+		case SDL_EventType.SDL_EVENT_MOUSE_WHEEL:
+		case SDL_EventType.SDL_EVENT_FINGER_DOWN:
+		case SDL_EventType.SDL_EVENT_FINGER_UP:
+		case SDL_EventType.SDL_EVENT_FINGER_MOTION:
+		case SDL_EventType.SDL_EVENT_FINGER_CANCELED:
+		case SDL_EventType.SDL_EVENT_PINCH_BEGIN:
+		case SDL_EventType.SDL_EVENT_PINCH_UPDATE:
+		case SDL_EventType.SDL_EVENT_PINCH_END:
+		case SDL_EventType.SDL_EVENT_KEY_DOWN:
+		case SDL_EventType.SDL_EVENT_KEY_UP:
+		case SDL_EventType.SDL_EVENT_TEXT_INPUT:
+		case SDL_EventType.SDL_EVENT_JOYSTICK_ADDED:
+		case SDL_EventType.SDL_EVENT_JOYSTICK_REMOVED:
+		case SDL_EventType.SDL_EVENT_JOYSTICK_BUTTON_DOWN:
+		case SDL_EventType.SDL_EVENT_JOYSTICK_BUTTON_UP:
+		case SDL_EventType.SDL_EVENT_JOYSTICK_AXIS_MOTION:
+		case SDL_EventType.SDL_EVENT_GAMEPAD_ADDED:
+		case SDL_EventType.SDL_EVENT_GAMEPAD_REMOVED:
+		case SDL_EventType.SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+		case SDL_EventType.SDL_EVENT_GAMEPAD_BUTTON_UP:
+		case SDL_EventType.SDL_EVENT_GAMEPAD_AXIS_MOTION:
+			if (inputProvider is InputProviderSDL sdlInputProvider)
+				sdlInputProvider.OnEvent(ev);
+			break;
+
+		case SDL_EventType.SDL_EVENT_WINDOW_FOCUS_GAINED:
+		case SDL_EventType.SDL_EVENT_WINDOW_FOCUS_LOST:
+		case SDL_EventType.SDL_EVENT_WINDOW_MOUSE_ENTER:
+		case SDL_EventType.SDL_EVENT_WINDOW_MOUSE_LEAVE:
+		case SDL_EventType.SDL_EVENT_WINDOW_RESIZED:
+		case SDL_EventType.SDL_EVENT_WINDOW_RESTORED:
+		case SDL_EventType.SDL_EVENT_WINDOW_MAXIMIZED:
+		case SDL_EventType.SDL_EVENT_WINDOW_MINIMIZED:
+		case SDL_EventType.SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+		case SDL_EventType.SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+		case SDL_EventType.SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+			foreach (var window in windows)
+				if (window.ID == ev.window.windowID)
+				{
+					window.OnEvent((SDL_EventType)ev.type);
+					break;
+				}
+			break;
+
+		default:
+			break;
+		}
 	}
 
 	private void PollEvents()
 	{
+#if BROWSER
+		return;
+#else
+		if (config.Flags.Has(AppFlags.Headless))
+			return;
+
 		// we shouldn't need to pump events here, but we've found that if we don't,
 		// there are issues on MacOS with it not receiving mouse clicks correctly
 		SDL_PumpEvents();
 
 		while (SDL_PollEvent(out var ev) && ev.type != (uint)SDL_EventType.SDL_EVENT_POLL_SENTINEL)
-		{
-			switch ((SDL_EventType)ev.type)
-			{
-			case SDL_EventType.SDL_EVENT_QUIT:
-				if (Running && !Exiting)
-				{
-					if (OnExitRequested != null)
-						OnExitRequested();
-					else
-						Exit();
-				}
-				break;
-
-			// input
-			case SDL_EventType.SDL_EVENT_MOUSE_BUTTON_DOWN:
-			case SDL_EventType.SDL_EVENT_MOUSE_BUTTON_UP:
-			case SDL_EventType.SDL_EVENT_MOUSE_WHEEL:
-			case SDL_EventType.SDL_EVENT_KEY_DOWN:
-			case SDL_EventType.SDL_EVENT_KEY_UP:
-			case SDL_EventType.SDL_EVENT_TEXT_INPUT:
-			case SDL_EventType.SDL_EVENT_JOYSTICK_ADDED:
-			case SDL_EventType.SDL_EVENT_JOYSTICK_REMOVED:
-			case SDL_EventType.SDL_EVENT_JOYSTICK_BUTTON_DOWN:
-			case SDL_EventType.SDL_EVENT_JOYSTICK_BUTTON_UP:
-			case SDL_EventType.SDL_EVENT_JOYSTICK_AXIS_MOTION:
-			case SDL_EventType.SDL_EVENT_GAMEPAD_ADDED:
-			case SDL_EventType.SDL_EVENT_GAMEPAD_REMOVED:
-			case SDL_EventType.SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-			case SDL_EventType.SDL_EVENT_GAMEPAD_BUTTON_UP:
-			case SDL_EventType.SDL_EVENT_GAMEPAD_AXIS_MOTION:
-				inputProvider.OnEvent(ev);
-				break;
-
-			case SDL_EventType.SDL_EVENT_WINDOW_FOCUS_GAINED:
-			case SDL_EventType.SDL_EVENT_WINDOW_FOCUS_LOST:
-			case SDL_EventType.SDL_EVENT_WINDOW_MOUSE_ENTER:
-			case SDL_EventType.SDL_EVENT_WINDOW_MOUSE_LEAVE:
-			case SDL_EventType.SDL_EVENT_WINDOW_RESIZED:
-			case SDL_EventType.SDL_EVENT_WINDOW_RESTORED:
-			case SDL_EventType.SDL_EVENT_WINDOW_MAXIMIZED:
-			case SDL_EventType.SDL_EVENT_WINDOW_MINIMIZED:
-			case SDL_EventType.SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
-			case SDL_EventType.SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
-			case SDL_EventType.SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-				foreach (var window in windows)
-					if (window.ID == ev.window.windowID)
-					{
-						window.OnEvent((SDL_EventType)ev.type);
-						break;
-					}
-				break;
-
-			default:
-				break;
-			}
-		}
+			ProcessEvent(ev);
+#endif
 	}
 
 	/// <summary>
@@ -630,7 +852,10 @@ public abstract class App : IDisposable
 	internal static string CreateErrorMessageFromSDL(string sdlMethod, string? fosterInfo = null)
 		=> $"{(fosterInfo != null ? $"{fosterInfo}. " : "")}{sdlMethod} failed: {SDL_GetError()}";
 
-	// [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+	[UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+	internal static unsafe void HandleLogFromSDLAot(nint userdata, int category, SDL_LogPriority priority, byte* message)
+		=> HandleLogFromSDL(userdata, category, priority, message);
+
 	internal static unsafe void HandleLogFromSDL(IntPtr userdata, int category, SDL_LogPriority priority, byte* message)
 	{
 		switch (priority)

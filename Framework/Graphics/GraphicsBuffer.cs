@@ -180,4 +180,53 @@ public class ComputeStorageBuffer<T>(GraphicsDevice graphicsDevice, string? name
 		fixed (T* ptr = data)
 			Upload(new nint(ptr), data.Length, offset);
 	}
+
+	/// <summary>
+	/// Asynchronously requests a copy of a range of elements back to the CPU.
+	/// This is non-stalling, but the result is not available immediately -
+	/// call <see cref="BufferDownload{T}.TryRead"/> on a later frame (at
+	/// least one frame later) to retrieve it.
+	///
+	/// Pass the handle returned from a previous call back in via
+	/// <paramref name="download"/> to reuse its slot (and transfer buffer)
+	/// for this new request; otherwise pass <c>default</c> to allocate a new
+	/// one. Typical usage is to keep the returned handle in a field and pass
+	/// it back in each time:
+	/// <code>
+	/// download = buffer.RequestDownload(0, count, download);
+	/// </code>
+	/// </summary>
+	public BufferDownload<T> RequestDownload(int elementOffset, int elementCount, BufferDownload<T> download = default)
+	{
+		var slot = download.Slot != 0 ? download.Slot : GraphicsDevice.AllocateDownloadSlot();
+		GraphicsDevice.DownloadBufferData(Resource, elementOffset * ElementSizeInBytes, elementCount * ElementSizeInBytes, slot);
+		return new BufferDownload<T>(GraphicsDevice, slot, ElementSizeInBytes);
+	}
+}
+
+/// <summary>
+/// A handle to an in-flight or completed asynchronous GPU buffer download,
+/// returned by <see cref="ComputeStorageBuffer{T}.RequestDownload"/>. A
+/// default-initialized handle has no associated download and
+/// <see cref="TryRead"/> always returns false for it.
+/// </summary>
+public readonly struct BufferDownload<T>(GraphicsDevice graphicsDevice, int downloadSlot, int elementSizeInBytes) where T : unmanaged
+{
+	internal readonly int Slot = downloadSlot;
+
+	/// <summary>
+	/// Attempts to read back the most recently downloaded data for this
+	/// handle. Returns false if no download has ever been requested for this
+	/// handle. The data may be stale (from a previous request) if the GPU
+	/// hasn't finished the copy yet - wait at least one frame after
+	/// requesting before reading.
+	/// </summary>
+	public unsafe bool TryRead(Span<T> dest)
+	{
+		if (Slot == 0)
+			return false;
+
+		fixed (T* ptr = dest)
+			return graphicsDevice.TryReadBufferDownload(Slot, new nint(ptr), dest.Length * elementSizeInBytes);
+	}
 }

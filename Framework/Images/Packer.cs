@@ -333,6 +333,7 @@ public class Packer
 			public RectInt Rect;
 			public unsafe PackingNode* Right;
 			public unsafe PackingNode* Down;
+			public unsafe PackingNode* Next; // free-leaf list link
 		};
 
 		private PackingNode[] buffer = [];
@@ -353,11 +354,32 @@ public class Packer
 				var nodePtr = nodes;
 				var rootPtr = ResetNode(nodePtr++, 0, 0, sources[from].Packed.Width + padding, sources[from].Packed.Height + padding);
 
+				// Free leaves are kept in a singly-linked list (via Next) in the
+				// exact order a Right-before-Down DFS of the node tree would visit
+				// them. A first-fit scan of this list therefore returns the same
+				// node the old recursive FindNode did, but only ever touches unused
+				// leaves instead of walking the whole tree of placed rectangles.
+				var freeHead = rootPtr;
+				var freeTail = rootPtr;
+
 				while (packed < sources.Length)
 				{
 					int w = sources[packed].Packed.Width + padding;
 					int h = sources[packed].Packed.Height + padding;
-					var node = FindNode(rootPtr, w, h);
+
+					// first-fit scan over the free leaves, tracking the predecessor
+					PackingNode* prev = null;
+					PackingNode* node = freeHead;
+					while (node != null)
+					{
+						if (w <= node->Rect.Width && h <= node->Rect.Height)
+							break;
+						prev = node;
+						node = node->Next;
+					}
+
+					// successor that the placed node's children splice in front of
+					PackingNode* spliceAfter = node != null ? node->Next : null;
 
 					// try to expand
 					if (node == null)
@@ -369,7 +391,8 @@ public class Packer
 
 						if (canGrowDown || canGrowRight)
 						{
-							// grow right
+							// grow right: the new column is to the right of everything,
+							// so its leaves come first in DFS order -> splice at front
 							if (shouldGrowRight || (!shouldGrowDown && canGrowRight))
 							{
 								var next = ResetNode(nodePtr++, 0, 0, rootPtr->Rect.Width + w, rootPtr->Rect.Height);
@@ -377,8 +400,12 @@ public class Packer
 								next->Down = rootPtr;
 								next->Right = node = ResetNode(nodePtr++, rootPtr->Rect.Width, 0, w, rootPtr->Rect.Height);
 								rootPtr = next;
+
+								prev = null;
+								spliceAfter = freeHead;
 							}
-							// grow down
+							// grow down: the new row is below everything, so its leaves
+							// come last in DFS order -> splice at back
 							else
 							{
 								var next = ResetNode(nodePtr++, 0, 0, rootPtr->Rect.Width, rootPtr->Rect.Height + h);
@@ -386,6 +413,9 @@ public class Packer
 								next->Down = node = ResetNode(nodePtr++, 0, rootPtr->Rect.Height, rootPtr->Rect.Width, h);
 								next->Right = rootPtr;
 								rootPtr = next;
+
+								prev = freeTail;
+								spliceAfter = null;
 							}
 						}
 					}
@@ -398,6 +428,23 @@ public class Packer
 					node->Used = true;
 					node->Down = ResetNode(nodePtr++, node->Rect.X, node->Rect.Y + h, node->Rect.Width, node->Rect.Height - h);
 					node->Right = ResetNode(nodePtr++, node->Rect.X + w, node->Rect.Y, node->Rect.Width - w, h);
+
+					// replace the placed node in the free list with its non-empty
+					// children, Right before Down (matching the old DFS order).
+					// Empty leaves never match a query, so we drop them here.
+					PackingNode* p = prev;
+					if (node->Right->Rect.Width > 0 && node->Right->Rect.Height > 0)
+					{
+						if (p == null) freeHead = node->Right; else p->Next = node->Right;
+						p = node->Right;
+					}
+					if (node->Down->Rect.Width > 0 && node->Down->Rect.Height > 0)
+					{
+						if (p == null) freeHead = node->Down; else p->Next = node->Down;
+						p = node->Down;
+					}
+					if (p == null) freeHead = spliceAfter; else p->Next = spliceAfter;
+					if (spliceAfter == null) freeTail = p;
 
 					var it = sources[packed];
 					it.Packed.X = node->Rect.X + halfPadding;
@@ -415,27 +462,13 @@ public class Packer
 			return new (packed, width, height);
 		}
 
-		private static unsafe PackingNode* FindNode(PackingNode* root, int w, int h)
-		{
-			if (root->Used)
-			{
-				var r = FindNode(root->Right, w, h);
-				return (r != null ? r : FindNode(root->Down, w, h));
-			}
-			else if (w <= root->Rect.Width && h <= root->Rect.Height)
-			{
-				return root;
-			}
-
-			return null;
-		}
-
 		private static unsafe PackingNode* ResetNode(PackingNode* node, int x, int y, int w, int h)
 		{
 			node->Used = false;
 			node->Rect = new RectInt(x, y, w, h);
 			node->Right = null;
 			node->Down = null;
+			node->Next = null;
 			return node;
 		}
 	}

@@ -29,6 +29,18 @@
     <NativeLibsDir>$(ProjectDir)Internal\Native\</NativeLibsDir>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64' or '$(RuntimeIdentifier)' == 'iossimulator-arm64' or '$(RuntimeIdentifier)' == 'iossimulator-x64'">
+    <DefineConstants>$(DefineConstants);IOS</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
+    <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'DebugInterp' and ('$(RuntimeIdentifier)' == 'ios-arm64' or '$(RuntimeIdentifier)' == 'iossimulator-arm64' or '$(RuntimeIdentifier)' == 'iossimulator-x64')">
+    <DefineConstants>$(DefineConstants);IOS_INTERP</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <Content Include="$(NativeLibsDir)win-x64\**" Visible="false">
       <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('Windows'))) or '$(RuntimeIdentifier)' == 'win-x64'">PreserveNewest</CopyToOutputDirectory>
@@ -43,7 +55,8 @@
       <Link>%(Filename)%(Extension)</Link>
     </Content>
     <Content Include="$(NativeLibsDir)osx\**" Visible="false">
-      <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX'))) or '$(RuntimeIdentifier)' == 'osx-x64'">PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX'))) or '$(RuntimeIdentifier)' == 'osx-x64' or '$(RuntimeIdentifier)' == 'osx-arm64'">PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX'))) or '$(RuntimeIdentifier)' == 'osx-x64' or '$(RuntimeIdentifier)' == 'osx-arm64'">PreserveNewest</CopyToPublishDirectory>
       <PackagePath>runtimes\osx\native</PackagePath>
       <Pack>True</Pack>
       <Link>%(Filename)%(Extension)</Link>
@@ -55,6 +68,20 @@
     <None Include="$(ProjectDir)..\README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
+  <!-- Shader compilation -->
+  <PropertyGroup>
+    <ShaderSourceDir>$(ProjectDir)Content/Shaders</ShaderSourceDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
+    <ShaderPlatform>web</ShaderPlatform>
+  </PropertyGroup>
+
+  <Import Project="$(ProjectDir)../msbuild/ShaderCompilation.targets" />
+
+  <!-- Hook shader compilation into the build -->
+  <Target Name="_CompileShadersBeforeBuild" BeforeTargets="BeforeBuild" DependsOnTargets="CompileShaders" />
+
   <!-- Default Font and Shader Content -->
   <ItemGroup>
     <EmbeddedResource Include="$(ProjectDir)Content/Shaders/Compiled/**" Visible="false">
@@ -63,6 +90,10 @@
     <EmbeddedResource Include="$(ProjectDir)Content/Fonts/Compiled/**" Visible="false">
       <LogicalName>Fonts/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
+    <Content Include="$(ProjectDir)Content/Web/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -36,7 +36,7 @@ public struct ComputeCommand
 	/// <summary>
 	/// Read-only Storage Buffers bound to the compute shader
 	/// </summary>
-	public StackList4<StorageBuffer?> ReadOnlyStorageBuffers;
+	public StackList8<StorageBuffer?> ReadOnlyStorageBuffers;
 
 	/// <summary>
 	/// Read-write Storage Buffers bound to the compute shader

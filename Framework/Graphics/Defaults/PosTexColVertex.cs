@@ -15,9 +15,9 @@ public struct PosTexColVertex(Vector2 position, Vector2 texcoord, Color color) :
 
 	public readonly VertexFormat Format => format;
 
-	private static readonly VertexFormat format = new([
+	private static readonly VertexFormat format = VertexFormat.Create<PosTexColVertex>(
 		new(0, VertexType.Float2, false),
 		new(1, VertexType.Float2, false),
 		new(2, VertexType.UByte4, true)
-	]);
+	);
 }

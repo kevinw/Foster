@@ -387,8 +387,12 @@ public class SpriteFont : IDisposable
 	public void AddCharacters(Font font, ReadOnlySpan<int> codepoints, float? size = null, bool premultiplyAlpha = true, bool pixelPerfect = false)
 	{
 		var scale = font.GetScale(size ?? Size);
+#if BROWSER
+		Color[]? buffer = null;
+#else
 		var buffers = new ThreadLocal<Color[]>();
 		var tasks = new List<Task>();
+#endif
 		var packer = new Packer()
 		{
 			MaxSize = 8192,
@@ -411,16 +415,20 @@ public class SpriteFont : IDisposable
 			if (!ch.Visible)
 				continue;
 
-			// blit and add to packer
-			tasks.Add(Task.Run(() =>
+			void BlitAndAdd()
 			{
 				// make sure our image buffer is big enough
+#if BROWSER
+				if (buffer == null || buffer.Length < ch.Width * ch.Height)
+					buffer = new Color[ch.Width * ch.Height * 2];
+#else
 				var buffer = buffers.Value;
 				if (buffer == null || buffer.Length < ch.Width * ch.Height)
 				{
 					buffer = new Color[ch.Width * ch.Height * 2];
 					buffers.Value = buffer;
 				}
+#endif
 
 				// blit char
 				font.GetPixels(ch, buffer, premultiplyAlpha);
@@ -436,14 +444,29 @@ public class SpriteFont : IDisposable
 				}
 
 				// append to packer
+#if BROWSER
+				packer.Add(codepoint, string.Empty, new RectInt(0, 0, ch.Width, ch.Height), ch.Width, buffer);
+#else
 				lock(packer)
 					packer.Add(codepoint, string.Empty, new RectInt(0, 0, ch.Width, ch.Height), ch.Width, buffer);
+#endif
+			}
+
+#if BROWSER
+			BlitAndAdd();
+#else
+			tasks.Add(Task.Run(() =>
+			{
+				BlitAndAdd();
 			}));
+#endif
 		}
 
+#if !BROWSER
 		// wait on all blitting
 		Task.WaitAll([..tasks]);
 		buffers.Dispose();
+#endif
 
 		// get packed textures
 		var result = packer.Pack();

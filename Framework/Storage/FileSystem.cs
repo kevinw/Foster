@@ -277,21 +277,22 @@ public sealed class FileSystem
 			var userdata = GCHandle.ToIntPtr(handle);
 
 			// open file dialog
+			var windowHandle = app.Window!.Handle;
 			switch (properties.Mode)
 			{
 				case DialogModes.OpenFile:
 					SDL_ShowOpenFileDialog(
-						CallbackFromSDL, userdata, app.Window.Handle, filtersUtf8,
+						CallbackFromSDL, userdata, windowHandle, filtersUtf8,
 						properties.Filters.Length, defaultLocation, properties.AllowMany);
 					break;
 				case DialogModes.SaveFile:
 					SDL_ShowSaveFileDialog(
-						CallbackFromSDL, userdata, app.Window.Handle, filtersUtf8,
+						CallbackFromSDL, userdata, windowHandle, filtersUtf8,
 						properties.Filters.Length, defaultLocation);
 					break;
 				case DialogModes.OpenFolder:
 					SDL_ShowOpenFolderDialog(
-						CallbackFromSDL, userdata, app.Window.Handle,
+						CallbackFromSDL, userdata, windowHandle,
 						defaultLocation, properties.AllowMany);
 					break;
 			}

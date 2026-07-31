@@ -5,6 +5,25 @@ namespace Foster.Framework;
 /// </summary>
 public abstract class GraphicsDevice
 {
+	public readonly struct GpuDebugScope : IDisposable
+	{
+		private readonly GraphicsDevice? device;
+		private readonly string? previousGroup;
+
+		internal GpuDebugScope(GraphicsDevice device, string name)
+		{
+			this.device = device;
+			previousGroup = device.activeGpuDebugGroup;
+			device.activeGpuDebugGroup = name;
+		}
+
+		public void Dispose()
+		{
+			if (device != null)
+				device.activeGpuDebugGroup = previousGroup;
+		}
+	}
+
 	internal readonly record struct ResourceHandle(nint Id)
 	{
 		public static implicit operator ResourceHandle(nint id) => new(id);
@@ -33,9 +52,24 @@ public abstract class GraphicsDevice
 	public abstract bool VSync { get; set; }
 
 	/// <summary>
+	/// How long the previous present call took on the CPU.
+	/// </summary>
+	public TimeSpan LastPresentDuration { get; internal set; }
+
+	/// <summary>
     /// Built-in Default Materials
     /// </summary>
 	public DefaultResources Defaults { get; private set; }
+	private string? activeGpuDebugGroup;
+	protected string? ActiveGpuDebugGroup => activeGpuDebugGroup;
+
+	private int nextDownloadSlot;
+
+	/// <summary>
+	/// Allocates a new slot id for an async buffer download. Slot 0 is
+	/// reserved to mean "no download requested yet".
+	/// </summary>
+	internal int AllocateDownloadSlot() => ++nextDownloadSlot;
 
 	internal GraphicsDevice(App app)
 	{
@@ -67,10 +101,50 @@ public abstract class GraphicsDevice
 	internal abstract ResourceHandle CreateShader(Shader shader, byte[] code, string entryPoint);
 	internal abstract ResourceHandle CreateBuffer(string? name, BufferType type, IndexFormat format);
 	internal abstract void UploadBufferData(ResourceHandle buffer, nint data, int dataSize, int dataDestOffset);
+	internal abstract void DownloadBufferData(ResourceHandle buffer, int sourceOffsetBytes, int lengthBytes, int slot);
+	internal abstract bool TryReadBufferDownload(int slot, nint data, int length);
+
+	/// <summary>
+	/// Enqueues an async copy of a region of a texture back to the CPU, readable
+	/// later via <see cref="TryReadTextureDownload"/>. The default implementation
+	/// services the request synchronously through <see cref="GetTextureData"/>;
+	/// backends without synchronous readback (WebGPU) override this with a
+	/// genuinely async copy whose result lands a frame or more later.
+	/// </summary>
+	internal virtual unsafe void DownloadTextureData(ResourceHandle texture, RectInt sourceRegion, int bytesPerPixel, int slot)
+	{
+		var length = sourceRegion.Width * sourceRegion.Height * bytesPerPixel;
+		if (!textureDownloads.TryGetValue(slot, out var buffer) || buffer.Length < length)
+			textureDownloads[slot] = buffer = new byte[length];
+		fixed (byte* ptr = buffer)
+			GetTextureData(texture, new nint(ptr), length, sourceRegion);
+	}
+
+	/// <summary>
+	/// Reads back the most recent data requested for the given slot via
+	/// <see cref="DownloadTextureData"/>, tightly packed. Returns false if no
+	/// download has completed for this slot yet.
+	/// </summary>
+	internal virtual unsafe bool TryReadTextureDownload(int slot, nint data, int length)
+	{
+		if (!textureDownloads.TryGetValue(slot, out var buffer))
+			return false;
+		fixed (byte* ptr = buffer)
+			System.Buffer.MemoryCopy(ptr, (void*)data, length, Math.Min(length, buffer.Length));
+		return true;
+	}
+
+	private readonly Dictionary<int, byte[]> textureDownloads = [];
 	internal abstract void DestroyResource(ResourceHandle resource);
 	internal abstract void PerformDraw(DrawCommand command);
 	internal abstract void PerformDispatch(ComputeCommand command);
 	internal abstract void Clear(IDrawableTarget target, ReadOnlySpan<Color> color, float depth, int stencil, ClearMask mask);
+
+	/// <summary>
+	/// Names draw commands submitted inside this scope for GPU debugging tools.
+	/// </summary>
+	public GpuDebugScope DebugGroup(string name)
+		=> new(this, name);
 
 	/// <summary>
 	/// Checks if a given Texture Format is supported

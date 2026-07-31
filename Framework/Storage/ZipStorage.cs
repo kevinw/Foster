@@ -13,16 +13,18 @@ public class ZipStorage : StorageContainer
 	/// as the Asset Loader will load things in various threads.
 	/// </summary>
 	private readonly ThreadLocal<ZipArchive> zip;
-	private readonly Dictionary<string, string> entries = [];
+	private readonly Dictionary<string, string> entries;
 
 	public override bool Writable => false;
 
 	/// <summary>
 	/// Creates a Zip Storage by reading a file from an existing Storage Container.
 	/// The Storage Container should not be closed for while the ZipStorage is in use.
+	/// Pass ignoreCase to make file and directory lookups case-insensitive (zip entries are case-sensitive by default).
 	/// </summary>
-	public ZipStorage(StorageContainer storage, string file)
+	public ZipStorage(StorageContainer storage, string file, bool ignoreCase = false)
 	{
+		entries = CreateEntries(ignoreCase);
 		zip = new(() =>
 		{
 			return new ZipArchive(storage.OpenRead(file), ZipArchiveMode.Read, leaveOpen: false);
@@ -35,9 +37,11 @@ public class ZipStorage : StorageContainer
 	/// Creates a Zip Storage from an arbitrary Stream factory.
 	/// Note that the stream factory must to be to create streams across threads,
 	/// as internally a <see cref="ZipArchive"/> is created per-thread.
+	/// Pass ignoreCase to make file and directory lookups case-insensitive (zip entries are case-sensitive by default).
 	/// </summary>
-	public ZipStorage(Func<Stream> streamFactory)
+	public ZipStorage(Func<Stream> streamFactory, bool ignoreCase = false)
 	{
+		entries = CreateEntries(ignoreCase);
 		zip = new(() =>
 		{
 			return new ZipArchive(streamFactory(), ZipArchiveMode.Read, leaveOpen: false);
@@ -47,10 +51,12 @@ public class ZipStorage : StorageContainer
 	}
 
 	/// <summary>
-	/// Creates a Zip Storage from a zip file in memory
+	/// Creates a Zip Storage from a zip file in memory.
+	/// Pass ignoreCase to make file and directory lookups case-insensitive (zip entries are case-sensitive by default).
 	/// </summary>
-	public ZipStorage(byte[] data)
+	public ZipStorage(byte[] data, bool ignoreCase = false)
 	{
+		entries = CreateEntries(ignoreCase);
 		zip = new(() =>
 		{
 			var stream = new MemoryStream(data);
@@ -59,6 +65,9 @@ public class ZipStorage : StorageContainer
 
 		ConstructEntries();
 	}
+
+	private static Dictionary<string, string> CreateEntries(bool ignoreCase)
+		=> new(ignoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
 	private void ConstructEntries()
 	{
@@ -145,6 +154,6 @@ public class ZipStorage : StorageContainer
 	{
 		if (entries.TryGetValue(Calc.NormalizePath(path), out var it))
 			return zip.Value!.GetEntry(it)!.Open();
-		throw new Exception();
+		throw new FileNotFoundException($"File '{path}' does not exist in the Zip Storage", path);
 	}
 }

@@ -10,7 +10,9 @@ namespace Foster.Framework;
 /// <summary>
 /// 8-bit RGBA Color struct
 /// </summary>
-[StructLayout(LayoutKind.Sequential, Pack = 4, Size = 4), JsonConverter(typeof(JsonConverter))]
+//
+// NOTE: I removed Pack=4, Size=4 in this fork. AOT trimme d browser builds fail in System.Text.Json JsonConverter with it. -kevinw, july 2026
+[StructLayout(LayoutKind.Sequential), JsonConverter(typeof(JsonConverter))]
 public struct Color : IEquatable<Color>
 {
 	/// <summary>

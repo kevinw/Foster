@@ -54,6 +54,11 @@ public sealed class Input
 		MouseWheel = 1 << 6,
 
 		/// <summary>
+		/// Enables Touch Input
+		/// </summary>
+		Touch = 1 << 7,
+
+		/// <summary>
 		/// Enables all Input
 		/// </summary>
 		All = ~0
@@ -93,6 +98,11 @@ public sealed class Input
 	/// The Mouse of the Current State
 	/// </summary>
 	public MouseState Mouse => State.Mouse;
+
+	/// <summary>
+	/// The Touches of the Current State
+	/// </summary>
+	public TouchState Touch => State.Touch;
 
 	/// <summary>
 	/// The Controllers of the Current State

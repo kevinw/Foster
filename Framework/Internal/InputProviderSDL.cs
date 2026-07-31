@@ -7,6 +7,9 @@ internal sealed class InputProviderSDL(App app) : InputProvider
 {
 	public readonly App App = app;
 	private Vector2 lastMouse;
+	private ulong primaryTouchFinger;
+	private bool hasPrimaryTouchFinger;
+	private bool primaryTouchMouseDown;
 
 	private readonly List<(uint ID, nint Ptr)> openJoysticks = [];
 	private readonly List<(uint ID, nint Ptr)> openGamepads = [];
@@ -44,14 +47,15 @@ internal sealed class InputProviderSDL(App app) : InputProvider
 
 	public override void Update(in Time time)
 	{
-		var mouse = App.Window.MousePosition;
+		var window = App.Window!;
+		var mouse = window.MousePosition;
 		var delta = mouse - lastMouse;
 
 		// get mouse delta if we're in relative mouse mode
-		if (SDL_GetWindowRelativeMouseMode(App.Window.Handle))
+		if (SDL_GetWindowRelativeMouseMode(window.Handle))
 		{
 			SDL_GetRelativeMouseState(out float dx, out float dy);
-			delta = new Vector2(dx, dy) / App.Window.Size * App.Window.SizeInPixels;
+			delta = new Vector2(dx, dy) / window.Size * window.SizeInPixels;
 		}
 
 		// add new event if moved
@@ -78,6 +82,41 @@ internal sealed class InputProviderSDL(App app) : InputProvider
 		case SDL_EventType.SDL_EVENT_MOUSE_WHEEL:
 			MouseWheel(new(ev.wheel.x, ev.wheel.y));
 			break;
+
+		// touch
+		case SDL_EventType.SDL_EVENT_FINGER_DOWN:
+		case SDL_EventType.SDL_EVENT_FINGER_MOTION:
+		case SDL_EventType.SDL_EVENT_FINGER_UP:
+		case SDL_EventType.SDL_EVENT_FINGER_CANCELED:
+			{
+				var type = (SDL_EventType)ev.type;
+				var position = TouchToPixel(new Vector2(ev.tfinger.x, ev.tfinger.y));
+				var delta = TouchToPixelDelta(new Vector2(ev.tfinger.dx, ev.tfinger.dy));
+				TouchFinger(
+					ev.tfinger.fingerID,
+					position,
+					delta,
+					ev.tfinger.pressure,
+					type == SDL_EventType.SDL_EVENT_FINGER_DOWN,
+					type == SDL_EventType.SDL_EVENT_FINGER_UP,
+					type == SDL_EventType.SDL_EVENT_FINGER_CANCELED,
+					App.Time.Elapsed);
+				SynthesizePrimaryTouchMouse(ev.tfinger.fingerID, type, position, delta);
+				break;
+			}
+		case SDL_EventType.SDL_EVENT_PINCH_BEGIN:
+		case SDL_EventType.SDL_EVENT_PINCH_UPDATE:
+		case SDL_EventType.SDL_EVENT_PINCH_END:
+			{
+				var type = (SDL_EventType)ev.type;
+				TouchPinch(
+					ev.pinch.scale,
+					type == SDL_EventType.SDL_EVENT_PINCH_BEGIN,
+					type == SDL_EventType.SDL_EVENT_PINCH_UPDATE,
+					type == SDL_EventType.SDL_EVENT_PINCH_END,
+					App.Time.Elapsed);
+				break;
+			}
 
 		// keyboard
 		case SDL_EventType.SDL_EVENT_KEY_DOWN:
@@ -237,6 +276,57 @@ internal sealed class InputProviderSDL(App app) : InputProvider
 			SDL_CloseGamepad(it.Ptr);
 		openJoysticks.Clear();
 		openGamepads.Clear();
+	}
+
+	private Vector2 TouchToPixel(Vector2 touch)
+		=> touch * App.Window!.SizeInPixels;
+
+	private Vector2 TouchToPixelDelta(Vector2 touchDelta)
+		=> touchDelta * App.Window!.SizeInPixels;
+
+	private void SynthesizePrimaryTouchMouse(ulong fingerID, SDL_EventType type, Vector2 position, Vector2 delta)
+	{
+		if (!OperatingSystem.IsIOS())
+			return;
+
+		if (type == SDL_EventType.SDL_EVENT_FINGER_DOWN)
+		{
+			if (!hasPrimaryTouchFinger)
+			{
+				primaryTouchFinger = fingerID;
+				hasPrimaryTouchFinger = true;
+				MouseMove(position, Vector2.Zero, App.Time.Elapsed);
+				MouseButton((int)MouseButtons.Left, true, App.Time.Elapsed);
+				primaryTouchMouseDown = true;
+			}
+			else if (primaryTouchMouseDown)
+			{
+				MouseButton((int)MouseButtons.Left, false, App.Time.Elapsed);
+				primaryTouchMouseDown = false;
+			}
+			return;
+		}
+
+		if (fingerID != primaryTouchFinger)
+			return;
+
+		if (type == SDL_EventType.SDL_EVENT_FINGER_MOTION)
+		{
+			MouseMove(position, delta, App.Time.Elapsed);
+			return;
+		}
+
+		if (type is SDL_EventType.SDL_EVENT_FINGER_UP or SDL_EventType.SDL_EVENT_FINGER_CANCELED)
+		{
+			MouseMove(position, delta, App.Time.Elapsed);
+			if (primaryTouchMouseDown)
+			{
+				MouseButton((int)MouseButtons.Left, false, App.Time.Elapsed);
+				primaryTouchMouseDown = false;
+			}
+			primaryTouchFinger = 0;
+			hasPrimaryTouchFinger = false;
+		}
 	}
 
 	private static Buttons GetButtonFromSDL(SDL_GamepadButton button) => button switch

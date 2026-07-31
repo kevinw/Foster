@@ -144,6 +144,32 @@ public abstract class InputProvider
 	}
 
 	/// <summary>
+	/// Notifies the Input of a change in Touch finger state.
+	/// </summary>
+	public void TouchFinger(ulong id, Vector2 position, Vector2 delta, float pressure, bool down, bool up, bool canceled, in TimeSpan time)
+	{
+		if (Input.Enabled.Has(Input.EnabledFlags.Touch))
+			Input.NextState.Touch.OnFinger(id, position, delta, pressure, down, up, canceled, time);
+
+		foreach (var it in echos)
+			if (it.TryGetTarget(out var target) && target.Enabled.Has(Input.EnabledFlags.Touch))
+				target.NextState.Touch.OnFinger(id, position, delta, pressure, down, up, canceled, time);
+	}
+
+	/// <summary>
+	/// Notifies the Input of a pinch gesture.
+	/// </summary>
+	public void TouchPinch(float scale, bool begin, bool update, bool end, in TimeSpan time)
+	{
+		if (Input.Enabled.Has(Input.EnabledFlags.Touch))
+			Input.NextState.Touch.OnPinch(scale, begin, update, end, time);
+
+		foreach (var it in echos)
+			if (it.TryGetTarget(out var target) && target.Enabled.Has(Input.EnabledFlags.Touch))
+				target.NextState.Touch.OnPinch(scale, begin, update, end, time);
+	}
+
+	/// <summary>
 	/// Notifies the Input of a controller connection
 	/// </summary>
 	public void ConnectController(

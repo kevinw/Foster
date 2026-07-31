@@ -96,6 +96,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 	// render pass
 	private IDrawableTarget? renderPassTarget;
 	private Point2 renderPassTargetSize;
+	private Point2 renderPassTextureSize;
 	private nint renderPassPipeline;
 	private StackList4<ResourceHandle> renderPassVertexBuffers;
 	private ResourceHandle renderPassIndexBuffer;
@@ -127,6 +128,14 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 	private nint textureDownloadBuffer;
 	private uint textureDownloadBufferSize;
 	private readonly Lock textureDownloadMutex = new();
+
+	// async (multi-frame-latency) buffer downloads, keyed by caller-provided slot id
+	private readonly struct BufferDownloadSlot(nint transferBuffer, uint size)
+	{
+		public readonly nint TransferBuffer = transferBuffer;
+		public readonly uint Size = size;
+	}
+	private readonly Dictionary<int, BufferDownloadSlot> bufferDownloads = [];
 
 	// exceptions
 	private readonly Exception deviceNotCreated = new("GPU Device has not been created");
@@ -356,6 +365,10 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 			textureUploadBuffer = nint.Zero;
 			SDL_ReleaseGPUTransferBuffer(device, bufferUploadBuffer);
 			bufferUploadBuffer = nint.Zero;
+
+			foreach (var slot in bufferDownloads.Values)
+				SDL_ReleaseGPUTransferBuffer(device, slot.TransferBuffer);
+			bufferDownloads.Clear();
 		}
 
 		// release pipelines
@@ -739,6 +752,75 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 			textureUploadBufferOffset += (uint)length;
 	}
 
+	/// <summary>
+	/// Enqueues an async, non-stalling copy of a region of a GPU buffer into a
+	/// per-slot download transfer buffer. The data becomes readable via
+	/// <see cref="TryReadBufferDownload"/> once the GPU has processed this
+	/// frame's commands - typically after one or more frames of latency.
+	/// </summary>
+	internal override void DownloadBufferData(ResourceHandle buffer, int sourceOffsetBytes, int lengthBytes, int slot)
+	{
+		if (device == nint.Zero)
+			throw deviceNotCreated;
+
+		var res = RequireResource<BufferResource>(buffer);
+
+		if (!bufferDownloads.TryGetValue(slot, out var transfer) || transfer.Size < lengthBytes)
+		{
+			if (transfer.TransferBuffer != nint.Zero)
+				SDL_ReleaseGPUTransferBuffer(device, transfer.TransferBuffer);
+
+			transfer = new BufferDownloadSlot(SDL_CreateGPUTransferBuffer(device, new()
+			{
+				usage = SDL_GPUTransferBufferUsage.SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD,
+				size = (uint)lengthBytes,
+				props = 0
+			}), (uint)lengthBytes);
+
+			bufferDownloads[slot] = transfer;
+		}
+
+		BeginCopyPass();
+
+		SDL_DownloadFromGPUBuffer(
+			copyPass,
+			source: new()
+			{
+				buffer = res.Buffer,
+				offset = (uint)sourceOffsetBytes,
+				size = (uint)lengthBytes
+			},
+			destination: new()
+			{
+				transfer_buffer = transfer.TransferBuffer,
+				offset = 0
+			}
+		);
+	}
+
+	/// <summary>
+	/// Reads back the most recent data downloaded into the given slot via
+	/// <see cref="DownloadBufferData"/>. Returns false if no download has
+	/// been requested for this slot yet. Mapping a download transfer buffer
+	/// before the GPU has finished writing to it (i.e. the same frame it was
+	/// requested) may return stale data, so callers should wait at least one
+	/// frame after requesting a download before reading it.
+	/// </summary>
+	internal override bool TryReadBufferDownload(int slot, nint data, int length)
+	{
+		if (device == nint.Zero)
+			throw deviceNotCreated;
+
+		if (!bufferDownloads.TryGetValue(slot, out var transfer))
+			return false;
+
+		var src = (byte*)SDL_MapGPUTransferBuffer(device, transfer.TransferBuffer, false);
+		Buffer.MemoryCopy(src, (void*)data, length, Math.Min(length, (int)transfer.Size));
+		SDL_UnmapGPUTransferBuffer(device, transfer.TransferBuffer);
+
+		return true;
+	}
+
 	internal override void GetTextureData(ResourceHandle handle, nint data, int length, RectInt sourceRegion)
 	{
 		if (device == nint.Zero)
@@ -1005,7 +1087,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 					offset = (uint)dataDestOffset,
 					size = (uint)dataSize
 				},
-				cycle: true
+				cycle: !OperatingSystem.IsIOS()
 			);
 		}
 
@@ -1205,8 +1287,11 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 			});
 		}
 
-		// set scissor
-		var nextScissor = command.Scissor ?? nextViewport;
+		// set scissor, clamped to the render pass texture: callers may compute
+		// scissors from the live window size, which can outgrow the backbuffer
+		// for a frame during a resize (Metal validation asserts on overflow)
+		var nextScissor = (command.Scissor ?? nextViewport)
+			.GetIntersection(new RectInt(0, 0, renderPassTextureSize.X, renderPassTextureSize.Y));
 		if (renderPassScissor != nextScissor)
 		{
 			renderPassScissor = nextScissor;
@@ -1388,29 +1473,41 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 		if (command.StencilTestEnabled)
 			SDL_SetGPUStencilReference(renderPass, command.StencilReferenceValue);
 
-		// perform draw
-		if (command.IndexBuffer != null)
-		{
-			SDL_DrawGPUIndexedPrimitives(
-				render_pass: renderPass,
-				num_indices: (uint)command.IndexCount,
-				num_instances: (uint)Math.Max(1, command.InstanceCount),
-				first_index: (uint)command.IndexOffset,
-				vertex_offset: command.VertexOffset,
-				first_instance: 0
-			);
+			var debugGroup = ActiveGpuDebugGroup;
+			if (!string.IsNullOrEmpty(debugGroup))
+				SDL_PushGPUDebugGroup(cmdRender, debugGroup);
+
+			try
+			{
+				// perform draw
+				if (command.IndexBuffer != null)
+				{
+					SDL_DrawGPUIndexedPrimitives(
+						render_pass: renderPass,
+						num_indices: (uint)command.IndexCount,
+						num_instances: (uint)Math.Max(1, command.InstanceCount),
+						first_index: (uint)command.IndexOffset,
+						vertex_offset: command.VertexOffset,
+						first_instance: 0
+					);
+				}
+				else
+				{
+					SDL_DrawGPUPrimitives(
+						render_pass: renderPass,
+						num_vertices: (uint)command.VertexCount,
+						num_instances: (uint)Math.Max(1, command.InstanceCount),
+						first_vertex: (uint)command.VertexOffset,
+						first_instance: 0
+					);
+				}
+			}
+			finally
+			{
+				if (!string.IsNullOrEmpty(debugGroup))
+					SDL_PopGPUDebugGroup(cmdRender);
+			}
 		}
-		else
-		{
-			SDL_DrawGPUPrimitives(
-				render_pass: renderPass,
-				num_vertices: (uint)command.VertexCount,
-				num_instances: (uint)Math.Max(1, command.InstanceCount),
-				first_vertex: (uint)command.VertexOffset,
-				first_instance: 0
-			);
-		}
-	}
 
 	internal override void PerformDispatch(ComputeCommand command)
 	{
@@ -1624,6 +1721,9 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 
 	private void BeginCopyPass()
 	{
+		var hadRenderPass = renderPass != nint.Zero;
+		if (OperatingSystem.IsIOS() && hadRenderPass)
+			FlushCommands(stall: false);
 		if (copyPass != nint.Zero)
 			return;
 		copyPass = SDL_BeginGPUCopyPass(cmdUpload);
@@ -1646,12 +1746,19 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 			!clear.Stencil.HasValue)
 			return true;
 
+		var hadCopyPass = copyPass != nint.Zero;
+		var hadRenderPass = renderPass != nint.Zero;
 		EndRenderPass();
+		if (OperatingSystem.IsIOS() && (hadCopyPass || hadRenderPass))
+			FlushCommands(stall: false);
 
 		// make sure we have something to draw to
 		var target = GetDrawTarget(drawableTarget, out renderPassTargetSize);
 		if (target == null)
 			return false;
+		renderPassTextureSize = target.Attachments.Length > 0
+			? new Point2(target.Attachments[0].Width, target.Attachments[0].Height)
+			: renderPassTargetSize;
 
 		// configure lists of textures used
 		renderPassTarget = drawableTarget;
@@ -1689,7 +1796,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 				store_op = colorTargets[i].Resolve == nint.Zero ?
 					SDL_GPUStoreOp.SDL_GPU_STOREOP_STORE :
 					SDL_GPUStoreOp.SDL_GPU_STOREOP_RESOLVE,
-				cycle = clear.Color.HasValue,
+				cycle = clear.Color.HasValue && !OperatingSystem.IsIOS(),
 				resolve_texture = colorTargets[i].Resolve
 			};
 		}
@@ -1713,7 +1820,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 					SDL_GPULoadOp.SDL_GPU_LOADOP_CLEAR :
 					SDL_GPULoadOp.SDL_GPU_LOADOP_LOAD,
 				stencil_store_op = SDL_GPUStoreOp.SDL_GPU_STOREOP_STORE,
-				cycle = clear.Depth.HasValue && clear.Stencil.HasValue,
+				cycle = clear.Depth.HasValue && clear.Stencil.HasValue && !OperatingSystem.IsIOS(),
 				clear_stencil = (byte)(clear.Stencil ?? 0),
 			};
 			depthTarget = ref depthValue;
@@ -1790,7 +1897,11 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 			var fragRes = self.RequireResource<ShaderResource>(command.FragmentShader!.Resource);
 			var vertexAttributeCount = 0;
 			foreach (var vb in command.VertexBuffers)
+#if IOS_INTERP || BROWSER
+				vertexAttributeCount += vb.Buffer.Format.ElementCount;
+#else
 				vertexAttributeCount += vb.Buffer.Format.Elements.Count;
+#endif
 
 			var colorBlendState = GetBlendState(command.BlendMode);
 			var colorAttachments = stackalloc SDL_GPUColorTargetDescription[MaxColorAttachments];
@@ -1840,7 +1951,11 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 					instance_step_rate = 0
 				};
 
+#if IOS_INTERP || BROWSER
+				foreach (var el in it.Format.ElementSpan)
+#else
 				foreach (var el in it.Format.Elements)
+#endif
 				{
 					vertexAttributes[attrbIndex] = new()
 					{
@@ -1923,7 +2038,22 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 
 			var pipeline = SDL_CreateGPUGraphicsPipeline(self.device, info);
 			if (pipeline == nint.Zero)
-				throw App.CreateExceptionFromSDL(nameof(SDL_CreateGPUGraphicsPipeline));
+			{
+				var error = SDL_GetError() ?? "Unknown error";
+				var debugInfo = $"""
+					Pipeline creation failed:
+					  Vertex Shader: {command.VertexShader?.Name ?? "null"} (samplers={command.VertexShader?.SamplerCount}, uniforms={command.VertexShader?.UniformBufferCount})
+					  Fragment Shader: {command.FragmentShader?.Name ?? "null"} (samplers={command.FragmentShader?.SamplerCount}, uniforms={command.FragmentShader?.UniformBufferCount})
+					  Vertex Buffers: {command.VertexBuffers.Count}
+					  Vertex Attributes: {vertexAttributeCount}
+					  Color Targets: {colorAttachmentCount}
+					  Depth/Stencil: {depthStencilAttachment}
+					  Sample Count: {sampleCount}
+					  SDL Error: {error}
+					""";
+				Console.Error.WriteLine(debugInfo);
+				throw new Exception($"SDL_CreateGPUGraphicsPipeline failed: {error}");
+			}
 
 			// add pipelines to shaders to be tracked by them
 			vertRes.Pipelines.Add(hash);

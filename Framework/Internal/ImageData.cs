@@ -27,7 +27,7 @@ internal unsafe struct ImageData
 
 	public readonly Span<byte> Bytes => new((void*)Data, SizeInBytes);
 	public readonly Span<Color> Pixels => new((void*)Data, Width * Height);
-	public readonly nint Data => surface != null ? surface->pixels : nint.Zero;
+	public readonly nint Data => surface != null ? surface->pixels : arrayHandle.IsAllocated ? arrayHandle.AddrOfPinnedObject() : nint.Zero;
 
 	/// <summary>
 	/// Decode PNG or QOI image Data from a Stream
@@ -60,6 +60,9 @@ internal unsafe struct ImageData
 		// try png next
 		else
 		{
+#if BROWSER
+			throw new NotSupportedException("PNG decoding is not available in the browser prototype yet.");
+#else
 			SDL_Surface* surface;
 			fixed (byte* buffer = data)
 			{
@@ -102,6 +105,7 @@ internal unsafe struct ImageData
 			{
 				return new ImageData(surface, default);
 			}
+#endif
 		}
 	}
 
@@ -113,8 +117,12 @@ internal unsafe struct ImageData
 		Debug.Assert(rgba.Length * sizeof(T) == width * height * Components);
 
 		var handle = GCHandle.Alloc(rgba, GCHandleType.Pinned);
+#if BROWSER
+		return new ImageData(handle, width, height);
+#else
 		var surface = SDL_CreateSurfaceFrom(width, height, SDL_PixelFormat.SDL_PIXELFORMAT_RGBA32, handle.AddrOfPinnedObject(), width * Components);
 		return new ImageData(surface, handle);
+#endif
 	}
 
 	/// <summary>
@@ -156,6 +164,14 @@ internal unsafe struct ImageData
 		arrayHandle = handle;
 		Width = surface->w;
 		Height = surface->h;
+	}
+
+	private ImageData(GCHandle handle, int width, int height)
+	{
+		surface = null;
+		arrayHandle = handle;
+		Width = width;
+		Height = height;
 	}
 
 	/// <summary>

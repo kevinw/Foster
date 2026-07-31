@@ -9,7 +9,9 @@ public enum GraphicsDriver
 	Private,
 	Vulkan,
 	D3D12,
-	Metal
+	Metal,
+	WebGPU,
+	Headless
 }
 
 /// <summary>
@@ -28,6 +30,8 @@ public static class GraphicsDriverExt
 		GraphicsDriver.Vulkan => "spv",
 		GraphicsDriver.D3D12 => "dxil",
 		GraphicsDriver.Metal => "msl",
+		GraphicsDriver.WebGPU => "wgsl",
+		GraphicsDriver.Headless => "spv",
 		_ => throw new NotImplementedException(),
 	};
 }

@@ -3,6 +3,7 @@ namespace Foster.Framework;
 /// <summary>
 /// Specifies which RBGA components are enabled when rendering to an <see cref="IDrawableTarget"/>
 /// </summary>
+[Flags]
 public enum BlendMask
 {
 	None  = 0,

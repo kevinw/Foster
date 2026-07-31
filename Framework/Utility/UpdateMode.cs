@@ -31,6 +31,12 @@ public readonly record struct UpdateMode(
 		/// How the Application will update as fast as it can
 		/// </summary>
 		Unlocked,
+
+		/// <summary>
+		/// The Application will run fixed-step updates back-to-back
+		/// as fast as the CPU can process them, ignoring wall-clock time.
+		/// </summary>
+		Unthrottled,
 	}
 
 	/// <summary>
@@ -69,6 +75,22 @@ public readonly record struct UpdateMode(
 		return new(
 			Modes.Unlocked,
 			TimeSpan.Zero,
+			TimeSpan.Zero,
+			false
+		);
+	}
+
+	/// <summary>
+	/// The Update loop will run fixed-step updates back-to-back
+	/// as fast as the CPU can process them, ignoring wall-clock time.
+	/// This is intended for headless simulation (e.g. RL training).
+	/// </summary>
+	/// <param name="fps">The target frames per second for each update step</param>
+	public static UpdateMode UnthrottledStep(int fps)
+	{
+		return new(
+			Modes.Unthrottled,
+			TimeSpan.FromSeconds(1.0f / fps),
 			TimeSpan.Zero,
 			false
 		);
