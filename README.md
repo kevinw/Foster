@@ -5,6 +5,9 @@
 # Foster
 Foster is a small cross-platform 2D-focused game framework in C#.
 
+> [!NOTE]
+> This fork of the [upstream Foster](https://github.com/FosterFramework/Foster) contains WebGPU/browser support, authored partially with LLMs. If that's not your bag, that's OK, but just letting you know!
+
 _★ very work in progress! likely to have frequent, breaking changes! please use at your own risk! ★_
 
 To use the framework either 
