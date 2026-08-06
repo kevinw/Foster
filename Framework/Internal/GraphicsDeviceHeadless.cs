@@ -25,10 +25,10 @@ internal class GraphicsDeviceHeadless(App app) : GraphicsDevice(app)
 	internal override void Present() { }
 	internal override void OnEvent(SDL3.SDL.SDL_EventType type) { }
 
-	internal override ResourceHandle CreateTexture(string? name, int width, int height, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding)
+	internal override ResourceHandle CreateTexture(string? name, int width, int height, int layers, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding)
 		=> new(new nint(Interlocked.Increment(ref nextResourceId)));
 
-	internal override void SetTextureData(ResourceHandle texture, nint data, int length, RectInt destRegion) { }
+	internal override void SetTextureData(ResourceHandle texture, int layer, nint data, int length, RectInt destRegion) { }
 	internal override void GetTextureData(ResourceHandle texture, nint data, int length, RectInt sourceRegion) { }
 	internal override void BlitTexture(ResourceHandle sourceTexture, RectInt sourceRegion, ResourceHandle destTexture, RectInt destRegion, TextureFilter filter) { }
 

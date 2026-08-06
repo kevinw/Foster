@@ -601,8 +601,9 @@ export function createTarget(name, width, height) {
 	return add({ name, width, height, attachments: [] });
 }
 
-export function createTexture(name, width, height, formatValue, targetHandle, computeUsage = 0) {
+export function createTexture(name, width, height, layers, formatValue, targetHandle, computeUsage = 0) {
 	try {
+		const layerCount = layers > 0 ? layers : 1;
 		const format = textureFormat(formatValue);
 		// COPY_SRC so any texture can be read back to the CPU via requestTextureDownload.
 		let usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT;
@@ -610,11 +611,19 @@ export function createTexture(name, width, height, formatValue, targetHandle, co
 			usage |= GPUTextureUsage.STORAGE_BINDING;
 		const texture = device.createTexture({
 			label: name,
-			size: [width, height],
+			// depthOrArrayLayers > 1 makes this a layered texture; the "2d-array"
+			// view below is what a texture_2d_array shader binding samples.
+			size: [width, height, layerCount],
 			format,
 			usage,
 		});
-		const handle = add({ texture, view: texture.createView(), format, width, height, targetHandle });
+		// A layered texture must be viewed as "2d-array" to bind to a
+		// texture_2d_array shader resource; a plain 2D texture keeps its default
+		// "2d" view so ordinary sprite/target shaders continue to bind.
+		const view = layerCount > 1
+			? texture.createView({ dimension: "2d-array", arrayLayerCount: layerCount })
+			: texture.createView();
+		const handle = add({ texture, view, format, width, height, layers: layerCount, targetHandle });
 		if (targetHandle) {
 			const target = get(targetHandle);
 			target.attachments.push(handle);
@@ -626,7 +635,7 @@ export function createTexture(name, width, height, formatValue, targetHandle, co
 	}
 }
 
-export function uploadTexture(textureHandle, data, x, y, width, height, bytesPerPixel) {
+export function uploadTexture(textureHandle, layer, data, x, y, width, height, bytesPerPixel) {
 	flushPendingClearForTexture(textureHandle);
 	const resource = get(textureHandle);
 	const source = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -644,11 +653,12 @@ export function uploadTexture(textureHandle, data, x, y, width, height, bytesPer
 		}
 	}
 
+	// origin z / the third copy-size component select the array layer to write.
 	device.queue.writeTexture(
-		{ texture: resource.texture, origin: [x, y] },
+		{ texture: resource.texture, origin: [x, y, layer] },
 		upload,
 		{ bytesPerRow },
-		[width, height]);
+		[width, height, 1]);
 }
 
 export function createShader(name, code, entryPoint) {

@@ -247,10 +247,10 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 		// default texture we fall back to rendering if passed a material with a missing texture
 		{
 			var data = stackalloc Color[1] { 0xe82979 };
-			emptyDefaultTexture = CreateTexture("Fallback", 1, 1, TextureFormat.R8G8B8A8, default, SampleCount.One, null);
-			emptyDefaultComputeStorageTexture = CreateTexture("StorageFallback", 1, 1, TextureFormat.R8G8B8A8, TextureFlags.ComputeRead | TextureFlags.ComputeWrite, SampleCount.One, null);
-			SetTextureData(emptyDefaultTexture, new nint(data), 4, RectInt.Identity);
-			SetTextureData(emptyDefaultComputeStorageTexture, new nint(data), 4, RectInt.Identity);
+			emptyDefaultTexture = CreateTexture("Fallback", 1, 1, 1, TextureFormat.R8G8B8A8, default, SampleCount.One, null);
+			emptyDefaultComputeStorageTexture = CreateTexture("StorageFallback", 1, 1, 1, TextureFormat.R8G8B8A8, TextureFlags.ComputeRead | TextureFlags.ComputeWrite, SampleCount.One, null);
+			SetTextureData(emptyDefaultTexture, 0, new nint(data), 4, RectInt.Identity);
+			SetTextureData(emptyDefaultComputeStorageTexture, 0, new nint(data), 4, RectInt.Identity);
 		}
 
 		// default buffer we fall back to rendering if shader expects buffers the user didn't supply
@@ -564,7 +564,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 		return SDL_GPUTextureSupportsSampleCount(device, GetTextureFormat(format), GetSampleCount(sampleCount));
 	}
 
-	internal override ResourceHandle CreateTexture(string? name, int width, int height, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding)
+	internal override ResourceHandle CreateTexture(string? name, int width, int height, int layers, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding)
 	{
 		if (device == nint.Zero)
 			throw deviceNotCreated;
@@ -578,12 +578,14 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 
 		SDL_GPUTextureCreateInfo info = new()
 		{
-			type = SDL_GPUTextureType.SDL_GPU_TEXTURETYPE_2D,
+			type = layers > 1
+				? SDL_GPUTextureType.SDL_GPU_TEXTURETYPE_2D_ARRAY
+				: SDL_GPUTextureType.SDL_GPU_TEXTURETYPE_2D,
 			format = GetTextureFormat(format),
 			usage = 0,
 			width = (uint)width,
 			height = (uint)height,
-			layer_count_or_depth = 1,
+			layer_count_or_depth = (uint)layers,
 			num_levels = 1,
 			sample_count = GetSampleCount(sampleCount),
 			props = props
@@ -621,7 +623,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 		if (sampleCount != SampleCount.One)
 		{
 			var resolveName = name != null ? $"Resolve-{name}" : null;
-			resolveTexture = CreateTexture(resolveName, width, height, format, flags, SampleCount.One, targetBinding);
+			resolveTexture = CreateTexture(resolveName, width, height, layers, format, flags, SampleCount.One, targetBinding);
 		}
 
 		// create resulting texture resource
@@ -644,7 +646,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 		return handle;
 	}
 
-	internal override void SetTextureData(ResourceHandle handle, nint data, int length, RectInt destRegion)
+	internal override void SetTextureData(ResourceHandle handle, int layer, nint data, int length, RectInt destRegion)
 	{
 		static uint RoundToAlignment(uint value, uint alignment)
 			=> alignment * ((value + alignment - 1) / alignment);
@@ -657,7 +659,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 		// search up for resolve texture if we're multisampled
 		if (res.MultiSampleResolve)
 		{
-			SetTextureData(res.MultiSampleResolve, data, length, destRegion);
+			SetTextureData(res.MultiSampleResolve, layer, data, length, destRegion);
 			return;
 		}
 
@@ -732,7 +734,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 				destination: new()
 				{
 					texture = res.Texture,
-					layer = 0,
+					layer = (uint)layer,
 					mip_level = 0,
 					x = (uint)destRegion.X,
 					y = (uint)destRegion.Y,

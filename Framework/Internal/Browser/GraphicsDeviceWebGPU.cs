@@ -14,6 +14,7 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 	{
 		public int Width;
 		public int Height;
+		public int Layers;
 		public TextureFormat Format;
 		public TargetResource? Target;
 	}
@@ -88,7 +89,7 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 		frameBegun = false;
 	}
 
-	internal override ResourceHandle CreateTexture(string? name, int width, int height, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding)
+	internal override ResourceHandle CreateTexture(string? name, int width, int height, int layers, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding)
 	{
 		if (!format.IsColorFormat())
 			throw new NotSupportedException($"WebGPU prototype does not support depth/stencil textures yet. Requested {format}.");
@@ -101,9 +102,10 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 		var computeUsage = (flags.Has(TextureFlags.ComputeRead) ? 1 : 0) | (flags.Has(TextureFlags.ComputeWrite) ? 2 : 0);
 		var resource = new TextureResource
 		{
-			BrowserHandle = BrowserWebGPU.CreateTexture(name ?? string.Empty, width, height, WebGPUTextureFormat(format), target?.BrowserHandle ?? 0, computeUsage),
+			BrowserHandle = BrowserWebGPU.CreateTexture(name ?? string.Empty, width, height, layers, WebGPUTextureFormat(format), target?.BrowserHandle ?? 0, computeUsage),
 			Width = width,
 			Height = height,
+			Layers = layers,
 			Format = format,
 			Target = target,
 		};
@@ -111,12 +113,12 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 		return AddResource(resource);
 	}
 
-	internal override unsafe void SetTextureData(ResourceHandle texture, nint data, int length, RectInt destRegion)
+	internal override unsafe void SetTextureData(ResourceHandle texture, int layer, nint data, int length, RectInt destRegion)
 	{
 		var resource = Find<TextureResource>(texture);
 		var bytes = new byte[length];
 		new ReadOnlySpan<byte>((void*)data, length).CopyTo(bytes);
-		BrowserWebGPU.UploadTexture(resource.BrowserHandle, bytes, destRegion.X, destRegion.Y, destRegion.Width, destRegion.Height, resource.Format.Size());
+		BrowserWebGPU.UploadTexture(resource.BrowserHandle, layer, bytes, destRegion.X, destRegion.Y, destRegion.Width, destRegion.Height, resource.Format.Size());
 	}
 
 	internal override void GetTextureData(ResourceHandle texture, nint data, int length, RectInt sourceRegion)

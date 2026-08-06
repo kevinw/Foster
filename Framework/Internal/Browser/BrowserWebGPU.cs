@@ -76,10 +76,10 @@ internal static partial class BrowserWebGPU
 	internal static partial float GetGamepadAxisValue(int slot, int axis);
 
 	[JSImport("createTexture", "FosterWebGPU")]
-	internal static partial int CreateTexture(string name, int width, int height, int format, int target, int computeUsage);
+	internal static partial int CreateTexture(string name, int width, int height, int layers, int format, int target, int computeUsage);
 
 	[JSImport("uploadTexture", "FosterWebGPU")]
-	internal static partial void UploadTexture(int texture, byte[] data, int x, int y, int width, int height, int bytesPerPixel);
+	internal static partial void UploadTexture(int texture, int layer, byte[] data, int x, int y, int width, int height, int bytesPerPixel);
 
 	[JSImport("createTarget", "FosterWebGPU")]
 	internal static partial int CreateTarget(string name, int width, int height);

@@ -39,6 +39,20 @@ public class Texture : IGraphicResource
 	public Point2 Size => new(Width, Height);
 
 	/// <summary>
+	/// The number of array layers in the Texture. This is 1 for an ordinary 2D
+	/// Texture, and greater than 1 for a 2D array Texture (each layer is a
+	/// separate <see cref="Width"/> x <see cref="Height"/> image sampled with a
+	/// layer index). Array textures are created via the array constructor and
+	/// have each layer uploaded independently with <see cref="SetData{T}(int, ReadOnlySpan{T})"/>.
+	/// </summary>
+	public readonly int Layers;
+
+	/// <summary>
+	/// Whether this is a 2D array Texture (<see cref="Layers"/> &gt; 1).
+	/// </summary>
+	public bool IsArray => Layers > 1;
+
+	/// <summary>
 	/// The Texture Data Format
 	/// </summary>
 	public readonly TextureFormat Format;
@@ -56,14 +70,23 @@ public class Texture : IGraphicResource
 	/// <summary>
 	/// The Memory Size of the Texture, in bytes
 	/// </summary>
-	public int MemorySize => Width * Height * Format.Size();
+	public int MemorySize => Width * Height * Layers * Format.Size();
 
 	internal readonly GraphicsDevice.ResourceHandle Resource;
 
 	private bool disposed;
 
 	public Texture(GraphicsDevice graphicsDevice, int width, int height, TextureFormat format = TextureFormat.Color, TextureFlags flags = TextureFlags.None, string? name = null)
-		: this(graphicsDevice, width, height, format, flags, SampleCount.One, targetBinding: null, name) {}
+		: this(graphicsDevice, width, height, layers: 1, format, flags, SampleCount.One, targetBinding: null, name) {}
+
+	/// <summary>
+	/// Creates a 2D array Texture with the given number of layers. Each layer is
+	/// a separate <paramref name="width"/> x <paramref name="height"/> image;
+	/// upload each one with <see cref="SetData{T}(int, ReadOnlySpan{T})"/> and
+	/// sample it in a shader declaring a <c>Texture2DArray</c> with a layer index.
+	/// </summary>
+	public Texture(GraphicsDevice graphicsDevice, int width, int height, int layers, TextureFormat format = TextureFormat.Color, TextureFlags flags = TextureFlags.None, string? name = null)
+		: this(graphicsDevice, width, height, layers, format, flags, SampleCount.One, targetBinding: null, name) {}
 
 	public Texture(GraphicsDevice graphicsDevice, int width, int height, ReadOnlySpan<Color> pixels, TextureFlags flags = TextureFlags.None, string? name = null)
 		: this(graphicsDevice, width, height, TextureFormat.Color, flags, name) => SetData<Color>(pixels);
@@ -77,17 +100,24 @@ public class Texture : IGraphicResource
 	public Texture(GraphicsDevice graphicsDevice, Image image, string? name = null)
 		: this(graphicsDevice, image.Width, image.Height, TextureFormat.Color, TextureFlags.None, name) => SetData<Color>(image.Data);
 
-	internal Texture(GraphicsDevice graphicsDevice, int width, int height, TextureFormat format, TextureFlags flags, SampleCount sampleCount, Target? targetBinding, string? name)
+	internal Texture(GraphicsDevice graphicsDevice, int width, int height, int layers, TextureFormat format, TextureFlags flags, SampleCount sampleCount, Target? targetBinding, string? name)
 	{
 		GraphicsDevice = graphicsDevice;
 
 		if (width <= 0 || height <= 0)
 			throw new Exception("Texture must have a size larger than 0");
 
-		Resource = graphicsDevice.CreateTexture(name, width, height, format, flags, sampleCount, targetBinding?.Resource);
+		if (layers <= 0)
+			throw new Exception("Texture must have at least one layer");
+
+		if (layers > 1 && targetBinding != null)
+			throw new Exception("Array textures cannot be used as Render Target attachments");
+
+		Resource = graphicsDevice.CreateTexture(name, width, height, layers, format, flags, sampleCount, targetBinding?.Resource);
 		Name = name ?? string.Empty;
 		Width = width;
 		Height = height;
+		Layers = layers;
 		Format = format;
 		SampleCount = sampleCount;
 		IsTargetAttachment = targetBinding != null;
@@ -99,15 +129,32 @@ public class Texture : IGraphicResource
 	/// Sets the Texture data from the given buffer
 	/// </summary>
 	public void SetData<T>(ReadOnlySpan<T> data) where T : struct
-		=> SetData(data, new RectInt(0, 0, Width, Height));
+		=> SetData(0, data, new RectInt(0, 0, Width, Height));
 
 	/// <summary>
 	/// Sets the Texture data in a region from the given buffer
 	/// </summary>
-	public unsafe void SetData<T>(ReadOnlySpan<T> data, RectInt destRegion) where T : struct
+	public void SetData<T>(ReadOnlySpan<T> data, RectInt destRegion) where T : struct
+		=> SetData(0, data, destRegion);
+
+	/// <summary>
+	/// Sets the data of a single array layer from the given buffer. For an
+	/// ordinary (non-array) Texture, only layer 0 is valid.
+	/// </summary>
+	public void SetData<T>(int layer, ReadOnlySpan<T> data) where T : struct
+		=> SetData(layer, data, new RectInt(0, 0, Width, Height));
+
+	/// <summary>
+	/// Sets the Texture data in a region of a single array layer from the given
+	/// buffer. For an ordinary (non-array) Texture, only layer 0 is valid.
+	/// </summary>
+	public unsafe void SetData<T>(int layer, ReadOnlySpan<T> data, RectInt destRegion) where T : struct
 	{
 		if (IsDisposed)
 			throw new Exception("Resource is Disposed");
+
+		if (layer < 0 || layer >= Layers)
+			throw new Exception("Layer is out of range");
 
 		if (destRegion.Left < 0 || destRegion.Top < 0 || destRegion.Bottom > Height || destRegion.Right > Width)
 			throw new Exception("Destination region is out of range");
@@ -119,7 +166,7 @@ public class Texture : IGraphicResource
 
 		fixed (byte* ptr = MemoryMarshal.AsBytes(data))
 		{
-			GraphicsDevice.SetTextureData(Resource, new nint(ptr), dataLength, destRegion);
+			GraphicsDevice.SetTextureData(Resource, layer, new nint(ptr), dataLength, destRegion);
 		}
 	}
 

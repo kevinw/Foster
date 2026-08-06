@@ -86,7 +86,7 @@ public class Target : IGraphicResource, IDrawableTarget
 		for (int i = 0; i < attachments.Count; i ++)
 		{
 			var attachmentName = !string.IsNullOrEmpty(name) ? $"{Name}-Attachment{i}" : null;
-			Attachments[i] = new Texture(graphicsDevice, width, height, attachments[i].Format, attachments[i].Flags, attachments[i].SampleCount, this, attachmentName);
+			Attachments[i] = new Texture(graphicsDevice, width, height, layers: 1, attachments[i].Format, attachments[i].Flags, attachments[i].SampleCount, this, attachmentName);
 		}
 	}
 
