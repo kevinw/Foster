@@ -94,6 +94,8 @@
 
   <ItemGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
     <Content Include="$(ProjectDir)Content/Web/**" CopyToOutputDirectory="PreserveNewest" />
+    <NativeFileReference Include="$(ProjectDir)Internal/Native/browser/foster_png_decode.cpp" />
+    <NativeFileReference Include="$(ProjectDir)Internal/Native/browser/lodepng/foster_lodepng.cpp" />
   </ItemGroup>
 
 </Project>

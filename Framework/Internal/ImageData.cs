@@ -36,7 +36,7 @@ internal unsafe struct ImageData
 	{
 		var mem = new MemoryStream();
 		stream.CopyTo(mem);
-		return Decode(mem.GetBuffer());
+		return Decode(mem.GetBuffer().AsSpan(0, checked((int)mem.Length)));
 	}
 
 	/// <summary>
@@ -61,7 +61,24 @@ internal unsafe struct ImageData
 		else
 		{
 #if BROWSER
-			throw new NotSupportedException("PNG decoding is not available in the browser prototype yet.");
+			fixed (byte* input = data)
+			{
+				var error = FosterPngDecodeRgba(input, (nuint)data.Length, out var output, out var width, out var height);
+				if (error != 0 || output == null || width <= 0 || height <= 0)
+					throw new Exception($"Failed to decode PNG file (lodepng error {error})");
+
+				try
+				{
+					var rgba = new byte[checked((int)((ulong)width * height * Components))];
+					fixed (byte* ptr = rgba)
+						Buffer.MemoryCopy(output, ptr, rgba.Length, rgba.Length);
+					return Rgba(rgba, (int)width, (int)height);
+				}
+				finally
+				{
+					FosterPngFree(output);
+				}
+			}
 #else
 			SDL_Surface* surface;
 			fixed (byte* buffer = data)
@@ -108,6 +125,14 @@ internal unsafe struct ImageData
 #endif
 		}
 	}
+
+#if BROWSER
+	[DllImport("foster_png_decode", EntryPoint = "FosterPngDecodeRgba")]
+	static extern uint FosterPngDecodeRgba(byte* input, nuint inputSize, out byte* output, out uint width, out uint height);
+
+	[DllImport("foster_png_decode", EntryPoint = "FosterPngFree")]
+	static extern void FosterPngFree(void* ptr);
+#endif
 
 	/// <summary>
 	/// Create Image data from an RGBA array
