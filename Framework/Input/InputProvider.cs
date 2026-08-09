@@ -227,4 +227,14 @@ public abstract class InputProvider
 			if (it.TryGetTarget(out var target) && target.Enabled.Has(Input.EnabledFlags.ControllerAxis))
 				target.NextState.GetController(id)?.OnAxis(axis, value, time);
 	}
+
+	public void ControllerTouchpadFinger(ControllerID id, int finger, bool down, Vector2 position, float pressure, in TimeSpan time)
+	{
+		if (Input.Enabled.Has(Input.EnabledFlags.ControllerButtons))
+			Input.NextState.GetController(id)?.OnTouchpadFinger(finger, down, position, pressure, time);
+
+		foreach (var it in echos)
+			if (it.TryGetTarget(out var target) && target.Enabled.Has(Input.EnabledFlags.ControllerButtons))
+				target.NextState.GetController(id)?.OnTouchpadFinger(finger, down, position, pressure, time);
+	}
 }

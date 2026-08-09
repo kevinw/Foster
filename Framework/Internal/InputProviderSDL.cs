@@ -265,6 +265,20 @@ internal sealed class InputProviderSDL(App app) : InputProvider
 
 				break;
 			}
+		case SDL_EventType.SDL_EVENT_GAMEPAD_TOUCHPAD_DOWN:
+		case SDL_EventType.SDL_EVENT_GAMEPAD_TOUCHPAD_MOTION:
+		case SDL_EventType.SDL_EVENT_GAMEPAD_TOUCHPAD_UP:
+			{
+				var type = (SDL_EventType)ev.type;
+				ControllerTouchpadFinger(
+					id: new(ev.gtouchpad.which),
+					finger: ev.gtouchpad.finger,
+					down: type != SDL_EventType.SDL_EVENT_GAMEPAD_TOUCHPAD_UP,
+					position: new Vector2(ev.gtouchpad.x, ev.gtouchpad.y),
+					pressure: ev.gtouchpad.pressure,
+					time: App.Time.Elapsed);
+				break;
+			}
 		}
 	}
 

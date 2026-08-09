@@ -15,6 +15,27 @@ public sealed class ControllerState(int index)
 {
 	public const int MaxButtons = 64;
 	public const int MaxAxis = 64;
+	public const int MaxTouchpadFingers = 4;
+
+	public readonly struct TouchpadFinger
+	{
+		public readonly bool Down;
+		public readonly bool Pressed;
+		public readonly bool Released;
+		public readonly Vector2 Position;
+		public readonly Vector2 Delta;
+		public readonly float Pressure;
+
+		internal TouchpadFinger(bool down, bool pressed, bool released, Vector2 position, Vector2 delta, float pressure)
+		{
+			Down = down;
+			Pressed = pressed;
+			Released = released;
+			Position = position;
+			Delta = delta;
+			Pressure = pressure;
+		}
+	}
 
 	internal static readonly ControllerState ClearedState = new(0);
 
@@ -93,6 +114,7 @@ public sealed class ControllerState(int index)
 	private readonly TimeSpan[] timestamp = new TimeSpan[MaxButtons];
 	private readonly float[] axis = new float[MaxAxis];
 	private readonly TimeSpan[] axisTimestamp = new TimeSpan[MaxAxis];
+	private readonly TouchpadFinger[] touchpad = new TouchpadFinger[MaxTouchpadFingers];
 	private Time time;
 
 	public bool Pressed(int buttonIndex) => buttonIndex >= 0 && buttonIndex < MaxButtons && pressed[buttonIndex];
@@ -116,6 +138,7 @@ public sealed class ControllerState(int index)
 
 	public Vector2 LeftStick => Axis(Foster.Framework.Axes.LeftX, Foster.Framework.Axes.LeftY);
 	public Vector2 RightStick => Axis(Foster.Framework.Axes.RightX, Foster.Framework.Axes.RightY);
+	public ReadOnlySpan<TouchpadFinger> Touchpad => touchpad;
 
 	public bool Repeated(Buttons button)
 	{
@@ -196,12 +219,18 @@ public sealed class ControllerState(int index)
 		Array.Fill(timestamp, TimeSpan.Zero);
 		Array.Fill(axis, 0);
 		Array.Fill(axisTimestamp, TimeSpan.Zero);
+		Array.Fill(touchpad, default);
 	}
 
 	internal void Step(in Time time)
 	{
 		Array.Fill(pressed, false);
 		Array.Fill(released, false);
+		for (var i = 0; i < touchpad.Length; i++)
+			if (touchpad[i].Down)
+				touchpad[i] = new(true, false, false, touchpad[i].Position, Vector2.Zero, touchpad[i].Pressure);
+			else
+				touchpad[i] = default;
 		this.time = time;
 	}
 
@@ -230,6 +259,7 @@ public sealed class ControllerState(int index)
 		Array.Copy(other.timestamp, 0, timestamp, 0, pressed.Length);
 		Array.Copy(other.axis, 0, axis, 0, axis.Length);
 		Array.Copy(other.axisTimestamp, 0, axisTimestamp, 0, axis.Length);
+		Array.Copy(other.touchpad, 0, touchpad, 0, touchpad.Length);
 	}
 
 	internal void OnButton(int buttonIndex, bool buttonPressed, in TimeSpan time)
@@ -261,5 +291,16 @@ public sealed class ControllerState(int index)
 		// todo: is this acceptable?
 		if (MathF.Abs(axisValue) > 0.50f)
 			InputTimestamp = time;
+	}
+
+	internal void OnTouchpadFinger(int finger, bool fingerDown, Vector2 position, float pressure, in TimeSpan time)
+	{
+		if (finger is < 0 or >= MaxTouchpadFingers)
+			return;
+
+		var wasDown = touchpad[finger].Down;
+		var delta = wasDown ? position - touchpad[finger].Position : Vector2.Zero;
+		touchpad[finger] = new(fingerDown, fingerDown && !wasDown, !fingerDown && wasDown, position, delta, pressure);
+		InputTimestamp = time;
 	}
 }
