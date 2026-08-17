@@ -37,6 +37,8 @@
     <!-- Tool paths - default to bundled binaries in Foster/tools/, can be overridden -->
     <ShaderCrossPath Condition="'$(ShaderCrossPath)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">$(MSBuildThisFileDirectory)../tools/windows/shadercross.exe</ShaderCrossPath>
     <ShaderCrossPath Condition="'$(ShaderCrossPath)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">$(MSBuildThisFileDirectory)../tools/macos/shadercross</ShaderCrossPath>
+    <!-- arm64 Linux (e.g. Asahi Linux) gets a natively-built shadercross; avoids FEX/muvm x86_64 emulation entirely -->
+    <ShaderCrossPath Condition="'$(ShaderCrossPath)' == '' And $([MSBuild]::IsOSPlatform('Linux')) And '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' == 'Arm64'">$(MSBuildThisFileDirectory)../tools/linux-arm64/shadercross</ShaderCrossPath>
     <ShaderCrossPath Condition="'$(ShaderCrossPath)' == '' And $([MSBuild]::IsOSPlatform('Linux'))">$(MSBuildThisFileDirectory)../tools/linux/shadercross</ShaderCrossPath>
     <ShaderCrossPath Condition="'$(ShaderCrossPath)' == ''">shadercross</ShaderCrossPath>
     <DxcPath Condition="'$(DxcPath)' == ''">dxc</DxcPath>
