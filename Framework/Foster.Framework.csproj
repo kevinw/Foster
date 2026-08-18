@@ -49,8 +49,14 @@
       <Link>%(Filename)%(Extension)</Link>
     </Content>
     <Content Include="$(NativeLibsDir)linux-x64\**" Visible="false">
-      <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('Linux'))) or '$(RuntimeIdentifier)' == 'linux-x64'">PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('Linux')) and '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' != 'Arm64') or '$(RuntimeIdentifier)' == 'linux-x64'">PreserveNewest</CopyToOutputDirectory>
       <PackagePath>runtimes\linux-x64\native</PackagePath>
+      <Pack>True</Pack>
+      <Link>%(Filename)%(Extension)</Link>
+    </Content>
+    <Content Include="$(NativeLibsDir)linux-arm64\**" Visible="false">
+      <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('Linux')) and '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' == 'Arm64') or '$(RuntimeIdentifier)' == 'linux-arm64'">PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes\linux-arm64\native</PackagePath>
       <Pack>True</Pack>
       <Link>%(Filename)%(Extension)</Link>
     </Content>
