@@ -138,10 +138,13 @@ public class Image : IDisposable
 	/// Write the image to PNG
 	/// </summary>
 	public byte[] WritePng()
+		=> WritePngNoCopy().ToArray();
+
+	public ReadOnlyMemory<byte> WritePngNoCopy()
 	{
 		var mem = new MemoryStream();
 		data.Encode(mem, ImageData.Formats.PNG);
-		return mem.GetBuffer();
+		return new(mem.GetBuffer(), 0, checked((int)mem.Length));
 	}
 
 	/// <summary>
@@ -165,10 +168,13 @@ public class Image : IDisposable
 	/// Write the image to QOI
 	/// </summary>
 	public byte[] WriteQoi()
+		=> WriteQoiNoCopy().ToArray();
+
+	public ReadOnlyMemory<byte> WriteQoiNoCopy()
 	{
 		var mem = new MemoryStream();
 		data.Encode(mem, ImageData.Formats.QOI);
-		return mem.GetBuffer();
+		return new(mem.GetBuffer(), 0, checked((int)mem.Length));
 	}
 
 	/// <summary>
