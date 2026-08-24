@@ -370,7 +370,6 @@ public class Batcher : IDisposable
 
 		currentBatch.Layer = layer;
 		currentBatchInsert = insert;
-		TryToMergeBatch();
 	}
 
 	private void SetMaterial(Material? material)
@@ -457,7 +456,8 @@ public class Batcher : IDisposable
 			var prev = batches[index];
 			var curr = currentBatch;
 
-			if (prev.Texture == curr.Texture &&
+			if (prev.Layer == curr.Layer &&
+				prev.Texture == curr.Texture &&
 				prev.Blend == curr.Blend &&
 				prev.Scissor == curr.Scissor &&
 				prev.Sampler == curr.Sampler &&

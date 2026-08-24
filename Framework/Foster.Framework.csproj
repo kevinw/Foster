@@ -6,7 +6,7 @@
 
     <Title>Foster</Title>
     <Product>Foster</Product>
-    <Version>0.3.0</Version>
+    <Version>0.4.1</Version>
     <Authors>Noel Berry</Authors>
     <Description>A small cross-platform 2D-focused Game Framework</Description>
     <RepositoryType>git</RepositoryType>
