@@ -76,6 +76,9 @@ public enum AppFlags
 	/// Run the Application in Headless mode, without a Window or GPU device.
 	/// </summary>
 	Headless = 1 << 3,
+
+	// Creates a GPU device without a Window or swapchain, for offscreen rendering tools.
+	Offscreen = 1 << 4,
 }
 
 /// <summary>
@@ -112,7 +115,7 @@ public abstract partial class App : IDisposable
 
 	/// <summary>
 	/// The Main Application Window.
-	/// This will be <c>null</c> in Headless mode.
+	/// This will be <c>null</c> in Headless or Offscreen mode.
 	/// </summary>
 	public Window? Window { get; private set; }
 
@@ -318,12 +321,13 @@ public abstract partial class App : IDisposable
 
 			// Create Modules
 			UpdateMode = config.UpdateMode ?? UpdateMode.FixedStep(60);
-			inputProvider = new InputProviderSDL(this);
+			inputProvider = config.Flags.Has(AppFlags.Offscreen) ? new InputProviderHeadless() : new InputProviderSDL(this);
 			Input = inputProvider.Input;
 			FileSystem = new(this);
 			GraphicsDevice = new GraphicsDeviceSDL(this, config.PreferredGraphicsDriver);
 			GraphicsDevice.CreateDevice(config.Flags);
-			Window = new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable);
+			Window = config.Flags.Has(AppFlags.Offscreen) ? null :
+				new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable);
 
 			// try to load default SDL gamepad mappings
 			Input.AddDefaultSDLGamepadMappings(AppContext.BaseDirectory);
