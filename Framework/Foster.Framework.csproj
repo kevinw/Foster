@@ -60,10 +60,17 @@
       <Pack>True</Pack>
       <Link>%(Filename)%(Extension)</Link>
     </Content>
-    <Content Include="$(NativeLibsDir)osx\**" Visible="false">
-      <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX'))) or '$(RuntimeIdentifier)' == 'osx-x64' or '$(RuntimeIdentifier)' == 'osx-arm64'">PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX'))) or '$(RuntimeIdentifier)' == 'osx-x64' or '$(RuntimeIdentifier)' == 'osx-arm64'">PreserveNewest</CopyToPublishDirectory>
-      <PackagePath>runtimes\osx\native</PackagePath>
+    <Content Include="$(NativeLibsDir)osx-arm64\**" Visible="false">
+      <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' == 'Arm64') or '$(RuntimeIdentifier)' == 'osx-arm64'">PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' == 'Arm64') or '$(RuntimeIdentifier)' == 'osx-arm64'">PreserveNewest</CopyToPublishDirectory>
+      <PackagePath>runtimes\osx-arm64\native</PackagePath>
+      <Pack>True</Pack>
+      <Link>%(Filename)%(Extension)</Link>
+    </Content>
+    <Content Include="$(NativeLibsDir)osx-x64\**" Visible="false">
+      <CopyToOutputDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' == 'X64') or '$(RuntimeIdentifier)' == 'osx-x64'">PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory Condition="('$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('OSX')) and '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' == 'X64') or '$(RuntimeIdentifier)' == 'osx-x64'">PreserveNewest</CopyToPublishDirectory>
+      <PackagePath>runtimes\osx-x64\native</PackagePath>
       <Pack>True</Pack>
       <Link>%(Filename)%(Extension)</Link>
     </Content>

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  SDL_VERSION: release-3.4.12
+  SDL_VERSION: release-3.4.16
 
 jobs:
   Build:
@@ -14,30 +14,36 @@ jobs:
           - os: windows-latest
             target: win-x64
             lib: SDL3.dll
+            platform_args: -DSDL_VULKAN:BOOL=OFF
+            strip_args: ""
           - os: macos-latest
-            target: osx
+            target: osx-arm64
             lib: libSDL3.dylib
+            platform_args: -DCMAKE_OSX_ARCHITECTURES=arm64 -DSDL_VULKAN:BOOL=OFF
+            strip_args: -x
+          - os: macos-latest
+            target: osx-x64
+            lib: libSDL3.dylib
+            platform_args: -DCMAKE_OSX_ARCHITECTURES=x86_64 -DSDL_VULKAN:BOOL=OFF
+            strip_args: -x
           - os: ubuntu-latest
             target: linux-x64
             lib: libSDL3.so
+            platform_args: -DSDL_KMSDRM=OFF -DSDL_RPI=OFF -DSDL_ROCKCHIP=OFF -DSDL_LIBURING=OFF
+            strip_args: --strip-unneeded
     runs-on: ${{matrix.os}}
     steps:
       - name: Clone SDL3
         run: git clone --depth 1 --branch ${{env.SDL_VERSION}} https://github.com/libsdl-org/sdl sdl3-src
-      - name: Setup macOS universal build
-        if: ${{ runner.os == 'macOS' }}
-        run: echo "CMAKE_EXTRA_ARGS=-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" >> $GITHUB_ENV
       - name: Setup Linux dependencies
         if: ${{ runner.os == 'Linux' }}
         run: |
           sudo apt-get update
           sudo apt-get install build-essential git make \
-            pkg-config cmake ninja-build gnome-desktop-testing libasound2-dev libpulse-dev \
-            libaudio-dev libfribidi-dev libjack-dev libsndio-dev libx11-dev libxext-dev \
+            pkg-config cmake ninja-build gnome-desktop-testing libfribidi-dev libx11-dev libxext-dev \
             libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
-            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
-            libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev \
-            libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev
+            libxkbcommon-dev libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev \
+            libwayland-dev libdecor-0-dev
       - name: Build SDL3
         shell: bash
         run: |
@@ -46,11 +52,27 @@ jobs:
             -DSDL_TEST_LIBRARY=OFF \
             -DSDL_SHARED=ON \
             -DSDL_STATIC=OFF \
-            $CMAKE_EXTRA_ARGS
+            -DSDL_AUDIO=OFF \
+            -DSDL_RENDER=OFF \
+            -DSDL_CAMERA=OFF \
+            -DSDL_HAPTIC=OFF \
+            -DSDL_POWER=OFF \
+            -DSDL_SENSOR=OFF \
+            -DSDL_TRAY=OFF \
+            -DSDL_OPENGL=OFF \
+            -DSDL_OPENGLES=OFF \
+            -DSDL_DUMMYVIDEO=OFF \
+            -DSDL_OFFSCREEN=ON \
+            -DSDL_VIRTUAL_JOYSTICK=OFF \
+            ${{matrix.platform_args}}
           cmake --build build --config Release
       - name: Collect Artifact
         shell: bash
-        run: find build -name "${{matrix.lib}}" -exec cp {} . \;
+        run: |
+          find build -name "${{matrix.lib}}" -exec cp {} . \;
+          if [[ -n "${{matrix.strip_args}}" ]]; then
+            strip ${{matrix.strip_args}} "${{matrix.lib}}"
+          fi
       - name: Publish Artifact
         uses: actions/upload-artifact@v4
         with:

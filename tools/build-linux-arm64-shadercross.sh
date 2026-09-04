@@ -29,7 +29,7 @@ set -euo pipefail
 
 # Pinned versions -- kept in sync with build-linux-shadercross.sh so the
 # x86_64 and arm64 Linux binaries come from the same upstream commits.
-SDL_TAG="release-3.4.10"
+SDL_TAG="release-3.4.16"
 SHADERCROSS_REF="9a4616443083"   # SDL_shadercross main @ 2026-06
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)

@@ -4,29 +4,18 @@
 # Foster/Framework/Internal/Native/linux-arm64/libSDL3.so, for running Foster
 # games on arm64 Linux (e.g. Asahi Linux on Apple Silicon).
 #
-# Foster/Framework/Internal/Native/linux-x64/libSDL3.so is x86_64-only, and
-# Foster.Framework.csproj copies it unconditionally on Linux regardless of
-# CPU arch, so on arm64 Linux the app tries to dlopen an x86_64 .so and
-# fails with DllNotFoundException.
-#
 # Unlike the trimmed headless SDL3 build used by build-linux-arm64-shadercross.sh
-# (which only needs offline shader compilation, no windowing), this is a full
-# desktop build: Foster's Linux GraphicsDeviceSDL backend uses SDL3's GPU API
-# with the Vulkan driver, so this needs real video (Wayland/X11), Vulkan
-# (dlopen'd at runtime, not linked), and audio support.
+# (which only needs offline shader compilation, no windowing), this needs real
+# video (Wayland/X11), SDL_GPU with Vulkan, and controller support.
 #
-# Package list below matches libsdl-org/setup-sdl's own apt-get list for
-# building SDL3 (github.com/libsdl-org/setup-sdl, src/version.ts), which is
-# what SDL's own CI uses -- so this should reproduce the same feature set as
-# the existing linux-x64 build (confirmed via `strings` on that .so: Wayland,
-# X11, Vulkan, PulseAudio, PipeWire, ALSA, libdecor are all present).
+# Foster does not use SDL's audio, renderer, camera, general haptics, power,
+# sensor, or tray APIs, so those subsystems are omitted.
 #
 # Usage:  Foster/tools/build-linux-arm64-sdl3.sh
 #
 set -euo pipefail
 
-# Pinned to the same tag as build-linux-arm64-shadercross.sh for consistency.
-SDL_TAG="release-3.4.10"
+SDL_TAG="release-3.4.16"
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 out_dir="$script_dir/../Framework/Internal/Native/linux-arm64"
@@ -45,18 +34,22 @@ podman run --rm \
     apt-get update
     apt-get install -y --no-install-recommends \
       ca-certificates git cmake make ninja-build pkg-config build-essential \
-      libasound2-dev libpulse-dev libaudio-dev libfribidi-dev libjack-dev \
-      libsndio-dev libusb-1.0-0-dev libx11-dev libxext-dev libxrandr-dev \
+      libfribidi-dev libusb-1.0-0-dev libx11-dev libxext-dev libxrandr-dev \
       libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
-      libwayland-dev libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
-      libgles2-mesa-dev libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev \
-      libudev-dev libthai-dev libpipewire-0.3-dev libdecor-0-dev
+      libwayland-dev libxkbcommon-dev libdbus-1-dev libibus-1.0-dev \
+      libudev-dev libthai-dev libdecor-0-dev
 
     cd /tmp
     git clone --depth 1 --branch "$SDL_TAG" https://github.com/libsdl-org/SDL.git
     cmake -S SDL -B build -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
       -DSDL_SHARED=ON -DSDL_STATIC=OFF \
+      -DSDL_TEST_LIBRARY=OFF \
+      -DSDL_AUDIO=OFF -DSDL_RENDER=OFF -DSDL_CAMERA=OFF \
+      -DSDL_HAPTIC=OFF -DSDL_POWER=OFF -DSDL_SENSOR=OFF -DSDL_TRAY=OFF \
+      -DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_DUMMYVIDEO=OFF -DSDL_OFFSCREEN=ON \
+      -DSDL_VIRTUAL_JOYSTICK=OFF -DSDL_LIBURING=OFF \
+      -DSDL_KMSDRM=OFF -DSDL_RPI=OFF -DSDL_ROCKCHIP=OFF \
       -DCMAKE_INSTALL_PREFIX=/tmp/prefix
     cmake --build build --parallel "$(nproc)"
     cmake --install build
@@ -67,6 +60,7 @@ podman run --rm \
     real_so=$(find /tmp/prefix/lib -maxdepth 1 -name "libSDL3.so.*" -type f | sort -V | tail -1)
     test -n "$real_so"
     cp -L "$real_so" /out/libSDL3.so
+    strip --strip-unneeded /out/libSDL3.so
     chmod 644 /out/libSDL3.so
     ls -l /out
   '
