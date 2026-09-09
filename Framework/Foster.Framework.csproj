@@ -93,13 +93,17 @@
   <Import Project="$(ProjectDir)../msbuild/ShaderCompilation.targets" />
 
   <!-- Hook shader compilation into the build -->
-  <Target Name="_CompileShadersBeforeBuild" BeforeTargets="BeforeBuild" DependsOnTargets="CompileShaders" />
+  <Target Name="_CompileShadersBeforeBuild" BeforeTargets="BeforeBuild" DependsOnTargets="CompileShaders">
+    <ItemGroup>
+      <_EmbeddedShader Include="$(ProjectDir)Content/Shaders/Compiled/**" />
+      <EmbeddedResource Include="@(_EmbeddedShader)" Visible="false">
+        <LogicalName>Shaders/%(_EmbeddedShader.Filename)%(_EmbeddedShader.Extension)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
 
-  <!-- Default Font and Shader Content -->
+  <!-- Default Font Content -->
   <ItemGroup>
-    <EmbeddedResource Include="$(ProjectDir)Content/Shaders/Compiled/**" Visible="false">
-      <LogicalName>Shaders/%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
     <EmbeddedResource Include="$(ProjectDir)Content/Fonts/Compiled/**" Visible="false">
       <LogicalName>Fonts/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
