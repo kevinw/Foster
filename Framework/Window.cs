@@ -593,6 +593,32 @@ public sealed class Window : IDrawableTarget
 #endif
 	}
 
+	// Sets the running application's Dock icon on macOS. Has no effect in the browser.
+	public unsafe void SetIcon(Image image)
+	{
+		if (IsDestroyed)
+			throw closedWindowException;
+		if (!app.IsMainThread())
+			throw notOnMainThreadException;
+		ObjectDisposedException.ThrowIf(image.IsDisposed, image);
+#if !BROWSER
+		var surface = (nint)SDL_CreateSurfaceFrom(image.Width, image.Height,
+			SDL_PixelFormat.SDL_PIXELFORMAT_RGBA32, image.Pointer, image.Width * sizeof(Color));
+		if (surface == nint.Zero)
+			throw App.CreateExceptionFromSDL(nameof(SDL_CreateSurfaceFrom));
+		try
+		{
+			if (!SDL_SetWindowIcon(Handle, surface))
+				throw App.CreateExceptionFromSDL(nameof(SDL_SetWindowIcon));
+		}
+		finally
+		{
+			SDL_DestroySurface(surface);
+			GC.KeepAlive(image);
+		}
+#endif
+	}
+
 	private void ApplyTitle()
 	{
 #if BROWSER
