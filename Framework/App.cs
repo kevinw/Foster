@@ -20,6 +20,7 @@ namespace Foster.Framework;
 /// <param name="UpdateMode">An optional default Update Mode to initialize the App with</param>
 /// <param name="PreferredGraphicsDriver">The preferred graphics driver, or None to use the platform-default</param>
 /// <param name="Flags">Optional App Initialization Flags</param>
+/// <param name="FramesInFlight">Maximum frames that may be pending on the GPU, from 1 to 3</param>
 public readonly record struct AppConfig
 (
 	string ApplicationName,
@@ -30,7 +31,8 @@ public readonly record struct AppConfig
 	bool Resizable = true,
 	UpdateMode? UpdateMode = null,
 	GraphicsDriver PreferredGraphicsDriver = GraphicsDriver.None,
-	AppFlags Flags = AppFlags.None
+	AppFlags Flags = AppFlags.None,
+	int FramesInFlight = 3
 );
 
 /// <summary>
@@ -324,7 +326,7 @@ public abstract partial class App : IDisposable
 			inputProvider = config.Flags.Has(AppFlags.Offscreen) ? new InputProviderHeadless() : new InputProviderSDL(this);
 			Input = inputProvider.Input;
 			FileSystem = new(this);
-			GraphicsDevice = new GraphicsDeviceSDL(this, config.PreferredGraphicsDriver);
+			GraphicsDevice = new GraphicsDeviceSDL(this, config.PreferredGraphicsDriver, config.FramesInFlight);
 			GraphicsDevice.CreateDevice(config.Flags);
 			Window = config.Flags.Has(AppFlags.Offscreen) ? null :
 				new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable);

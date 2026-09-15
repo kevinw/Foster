@@ -5,7 +5,7 @@ using static SDL3.SDL;
 
 namespace Foster.Framework;
 
-internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : GraphicsDevice(app)
+internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int framesInFlight) : GraphicsDevice(app)
 {
 	private class Resource(GraphicsDeviceSDL graphicsDevice)
 	{
@@ -172,6 +172,8 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 	{
 		if (device != nint.Zero)
 			throw new Exception("GPU Device is already created");
+		if (framesInFlight is < 1 or > MaxFramesInFlight)
+			throw new ArgumentOutOfRangeException(nameof(framesInFlight), framesInFlight, $"Must be between 1 and {MaxFramesInFlight}.");
 
 		this.flags = flags;
 
@@ -195,6 +197,8 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 
 		if (device == IntPtr.Zero)
 			throw App.CreateExceptionFromSDL(nameof(SDL_CreateGPUDevice));
+		if (!SDL_SetGPUAllowedFramesInFlight(device, (uint)framesInFlight))
+			Log.Warning($"{App.CreateErrorMessageFromSDL(nameof(SDL_SetGPUAllowedFramesInFlight))}; continuing with SDL's default");
 
 		var driverName = SDL_GetGPUDeviceDriver(device);
 		driver = driverName switch
@@ -259,9 +263,6 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred) : Gra
 			emptyDefaultBuffer = CreateBuffer("Fallback", BufferType.Storage, default);
 			UploadBufferData(emptyDefaultBuffer, new nint(data), 1, 0);
 		}
-
-		// default to 3 frames in flight
-		SDL_SetGPUAllowedFramesInFlight(device, 3);
 	}
 
 	internal override void DestroyDevice()
