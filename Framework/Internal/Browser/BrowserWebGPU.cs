@@ -20,6 +20,9 @@ internal static partial class BrowserWebGPU
 	[JSImport("setTitle", "FosterWebGPU")]
 	internal static partial void SetTitle(string title);
 
+	[JSImport("setMouseVisible", "FosterWebGPU")]
+	internal static partial void SetMouseVisible(bool enabled);
+
 	[JSImport("getMouseX", "FosterWebGPU")]
 	internal static partial float GetMouseX();
 

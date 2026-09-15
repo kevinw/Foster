@@ -516,6 +516,10 @@ export function setDebugOverlayStats(text) {
 	globalThis.TinyLinkDebugOverlay?.setStats?.(text);
 }
 
+export function setMouseVisible(enabled) {
+	canvas.style.cursor = enabled ? "default" : "none";
+}
+
 export function getMouseX() {
 	return mouseX;
 }

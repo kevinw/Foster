@@ -558,12 +558,16 @@ public abstract partial class App : IDisposable
 	/// </summary>
 	public void SetMouseVisible(bool enabled)
 	{
+#if BROWSER
+		BrowserWebGPU.SetMouseVisible(enabled);
+#else
 		if (enabled == SDL_CursorVisible())
 			return;
 
 		var result = enabled ? SDL_ShowCursor() : SDL_HideCursor();
 		if (!result)
 			Log.Warning($"Failed to set Mouse visibility: {SDL_GetError()}");
+#endif
 	}
 
 	/// <summary>
