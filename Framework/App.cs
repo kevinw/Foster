@@ -630,8 +630,8 @@ public abstract partial class App : IDisposable
 				SDL_WarpMouseInWindow(Window.Handle, Window.Width / 2, Window.Height / 2);
 #endif
 
-			inputProvider.Update(Time);
 			PollEvents();
+			inputProvider.Update(Time);
 			FramePool.NextFrame();
 
 			while (mainThreadQueue.TryDequeue(out var action))
