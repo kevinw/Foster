@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 using static SDL3.SDL;
 
@@ -16,6 +17,7 @@ namespace Foster.Framework;
 /// and <see cref="FileSystem.OpenUserStorage(Action{ContentStorage})"/> through
 /// <see cref="App.FileSystem"/>.
 /// </summary>
+[UnsupportedOSPlatform("browser")]
 public sealed class ContentStorage : StorageContainer
 {
 	private nint handle;

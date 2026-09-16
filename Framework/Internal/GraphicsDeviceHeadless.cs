@@ -23,8 +23,6 @@ internal class GraphicsDeviceHeadless(App app) : GraphicsDevice(app)
 	internal override void WindowCreated(Window window) { }
 	internal override void WindowDestroyed(Window window) { }
 	internal override void Present() { }
-	internal override void OnEvent(SDL3.SDL.SDL_EventType type) { }
-
 	internal override ResourceHandle CreateTexture(string? name, int width, int height, int layers, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding)
 		=> new(new nint(Interlocked.Increment(ref nextResourceId)));
 

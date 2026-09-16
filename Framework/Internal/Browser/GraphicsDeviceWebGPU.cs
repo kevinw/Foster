@@ -80,8 +80,6 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 	internal override void Shutdown() {}
 	internal override void WindowCreated(Window window) {}
 	internal override void WindowDestroyed(Window window) {}
-	internal override void OnEvent(SDL3.SDL.SDL_EventType type) {}
-
 	internal override void Present()
 	{
 		if (frameBegun)

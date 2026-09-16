@@ -4,7 +4,9 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+#if !BROWSER
 using static SDL3.SDL;
+#endif
 
 namespace Foster.Framework;
 
@@ -364,8 +366,10 @@ public abstract partial class App : IDisposable
 
 				GraphicsDevice.Shutdown();
 				GraphicsDevice.DestroyDevice();
+#if !BROWSER
 				if (inputProvider is InputProviderSDL sdlInputProvider)
 					sdlInputProvider.CloseDevices();
+#endif
 				mainThreadQueue.Clear();
 			}
 
@@ -575,6 +579,9 @@ public abstract partial class App : IDisposable
 	/// </summary>
 	public void SetMouseCursor(Cursor? cursor)
 	{
+#if BROWSER
+		currentCursor = cursor;
+#else
 		if (currentCursor == cursor)
 			return;
 
@@ -592,6 +599,7 @@ public abstract partial class App : IDisposable
 			currentCursor = cursor;
 		else
 			Log.Warning($"Failed to set Mouse Cursor: {SDL_GetError()}");
+#endif
 	}
 
 	internal void WindowCreated(Window window)
@@ -735,28 +743,17 @@ public abstract partial class App : IDisposable
 			DestroyWaitingWindows();
 	}
 
+#if !BROWSER
 	private unsafe bool EventWatcher(nint userdata, SDL_Event* eventPtr)
 	{
 		var type = (SDL_EventType)eventPtr->type;
 
-		if (type == SDL_EventType.SDL_EVENT_DID_ENTER_FOREGROUND ||
-			type == SDL_EventType.SDL_EVENT_WILL_ENTER_FOREGROUND ||
-			type == SDL_EventType.SDL_EVENT_DID_ENTER_BACKGROUND ||
-			type == SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND)
-			HandleAppLifecycleEvent(type);
+		if (type == SDL_EventType.SDL_EVENT_DID_ENTER_FOREGROUND)
+			HandleAppLifecycleEvent(AppEvents.EnterForeground);
+		else if (type == SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND)
+			HandleAppLifecycleEvent(AppEvents.EnterBackground);
 
 		return true;
-	}
-
-	private void HandleAppLifecycleEvent(SDL_EventType type)
-	{
-		GraphicsDevice.OnEvent(type);
-
-		if (type == SDL_EventType.SDL_EVENT_DID_ENTER_FOREGROUND)
-			OnEvent?.Invoke(AppEvents.EnterForeground);
-
-		if (type == SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND)
-			OnEvent?.Invoke(AppEvents.EnterBackground);
 	}
 
 	private void ProcessEvent(SDL_Event ev)
@@ -768,7 +765,12 @@ public abstract partial class App : IDisposable
 		case SDL_EventType.SDL_EVENT_DID_ENTER_BACKGROUND:
 		case SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND:
 			if (OperatingSystem.IsIOS())
-				HandleAppLifecycleEvent((SDL_EventType)ev.type);
+			{
+				if ((SDL_EventType)ev.type == SDL_EventType.SDL_EVENT_DID_ENTER_FOREGROUND)
+					HandleAppLifecycleEvent(AppEvents.EnterForeground);
+				else if ((SDL_EventType)ev.type == SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND)
+					HandleAppLifecycleEvent(AppEvents.EnterBackground);
+			}
 			break;
 
 		case SDL_EventType.SDL_EVENT_QUIT:
@@ -823,7 +825,20 @@ public abstract partial class App : IDisposable
 			foreach (var window in windows)
 				if (window.ID == ev.window.windowID)
 				{
-					window.OnEvent((SDL_EventType)ev.type);
+					window.OnEvent((SDL_EventType)ev.type switch
+					{
+						SDL_EventType.SDL_EVENT_WINDOW_FOCUS_GAINED => WindowEvent.FocusGained,
+						SDL_EventType.SDL_EVENT_WINDOW_FOCUS_LOST => WindowEvent.FocusLost,
+						SDL_EventType.SDL_EVENT_WINDOW_MOUSE_ENTER => WindowEvent.MouseEntered,
+						SDL_EventType.SDL_EVENT_WINDOW_MOUSE_LEAVE => WindowEvent.MouseLeft,
+						SDL_EventType.SDL_EVENT_WINDOW_RESIZED => WindowEvent.Resized,
+						SDL_EventType.SDL_EVENT_WINDOW_RESTORED => WindowEvent.Restored,
+						SDL_EventType.SDL_EVENT_WINDOW_MAXIMIZED => WindowEvent.Maximized,
+						SDL_EventType.SDL_EVENT_WINDOW_MINIMIZED => WindowEvent.Minimized,
+						SDL_EventType.SDL_EVENT_WINDOW_ENTER_FULLSCREEN => WindowEvent.FullscreenEntered,
+						SDL_EventType.SDL_EVENT_WINDOW_LEAVE_FULLSCREEN => WindowEvent.FullscreenExited,
+						_ => WindowEvent.CloseRequested,
+					});
 					break;
 				}
 			break;
@@ -831,6 +846,13 @@ public abstract partial class App : IDisposable
 		default:
 			break;
 		}
+	}
+#endif
+
+	private void HandleAppLifecycleEvent(AppEvents type)
+	{
+		GraphicsDevice.OnAppBackgroundChanged(type == AppEvents.EnterBackground);
+		OnEvent?.Invoke(type);
 	}
 
 	private void PollEvents()
@@ -860,8 +882,13 @@ public abstract partial class App : IDisposable
 	/// Creates an error string with information from SDL_GetError()
 	/// </summary>
 	internal static string CreateErrorMessageFromSDL(string sdlMethod, string? fosterInfo = null)
+#if BROWSER
+		=> $"{(fosterInfo != null ? $"{fosterInfo}. " : "")}{sdlMethod} failed";
+#else
 		=> $"{(fosterInfo != null ? $"{fosterInfo}. " : "")}{sdlMethod} failed: {SDL_GetError()}";
+#endif
 
+#if !BROWSER
 	[UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
 	internal static unsafe void HandleLogFromSDLAot(nint userdata, int category, SDL_LogPriority priority, byte* message)
 		=> HandleLogFromSDL(userdata, category, priority, message);
@@ -879,9 +906,10 @@ public abstract partial class App : IDisposable
 				Log.Warning(new nint(message));
 				break;
 			case SDL_LogPriority.SDL_LOG_PRIORITY_ERROR:
-			case SDL_LogPriority.SDL_LOG_PRIORITY_CRITICAL:
-				Log.Error(new nint(message));
-				break;
+		case SDL_LogPriority.SDL_LOG_PRIORITY_CRITICAL:
+			Log.Error(new nint(message));
+			break;
 		}
 	}
+#endif
 }

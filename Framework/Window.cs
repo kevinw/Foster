@@ -1,8 +1,26 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+#if !BROWSER
 using static SDL3.SDL;
+#endif
 
 namespace Foster.Framework;
+
+// Mirrors the window events Foster uses from SDL without leaking SDL types into browser builds.
+internal enum WindowEvent
+{
+	FocusGained,
+	FocusLost,
+	MouseEntered,
+	MouseLeft,
+	Resized,
+	Restored,
+	Maximized,
+	Minimized,
+	FullscreenEntered,
+	FullscreenExited,
+	CloseRequested,
+}
 
 public sealed class Window : IDrawableTarget
 {
@@ -57,16 +75,22 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return Point2.Zero;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_GetWindowPosition(Handle, out var x, out var y);
 			return new(x, y);
+#endif
 		}
 		set
 		{
+#if !BROWSER
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_SetWindowPosition(Handle, value.X, value.Y);
+#endif
 		}
 	}
 
@@ -245,15 +269,21 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return true;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			return (SDL_GetWindowFlags(Handle) & SDL_WindowFlags.SDL_WINDOW_RESIZABLE) != 0;
+#endif
 		}
 		set
 		{
+#if !BROWSER
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_SetWindowResizable(Handle, value);
+#endif
 		}
 	}
 
@@ -264,15 +294,21 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return false;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			return (SDL_GetWindowFlags(Handle) & SDL_WindowFlags.SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+#endif
 		}
 		set
 		{
+#if !BROWSER
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			SDL_SetWindowAlwaysOnTop(Handle, value);
+#endif
 		}
 	}
 
@@ -283,18 +319,24 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return false;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			return (SDL_GetWindowFlags(Handle) & SDL_WindowFlags.SDL_WINDOW_MAXIMIZED) != 0;
+#endif
 		}
 		set
 		{
+#if !BROWSER
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			if (value && !Maximized)
 				SDL_MaximizeWindow(Handle);
 			else if (!value && Maximized)
 				SDL_RestoreWindow(Handle);
+#endif
 		}
 	}
 
@@ -305,10 +347,14 @@ public sealed class Window : IDrawableTarget
 	{
 		get
 		{
+#if BROWSER
+			return true;
+#else
 			if (Handle == nint.Zero)
 				throw closedWindowException;
 			var flags = SDL_WindowFlags.SDL_WINDOW_INPUT_FOCUS | SDL_WindowFlags.SDL_WINDOW_MOUSE_FOCUS;
 			return (SDL_GetWindowFlags(Handle) & flags) != 0;
+#endif
 		}
 	}
 
@@ -492,6 +538,7 @@ public sealed class Window : IDrawableTarget
 	/// </summary>
 	public void StartTextInput()
 	{
+#if !BROWSER
 		if (app.IsMainThread())
 		{
 			if (!SDL_TextInputActive(Handle))
@@ -501,6 +548,7 @@ public sealed class Window : IDrawableTarget
 		{
 			app.RunOnMainThread(StartTextInput);
 		}
+#endif
 	}
 
 	/// <summary>
@@ -508,6 +556,7 @@ public sealed class Window : IDrawableTarget
 	/// </summary>
 	public void StopTextInput()
 	{
+#if !BROWSER
 		if (app.IsMainThread())
 		{
 			if (SDL_TextInputActive(Handle))
@@ -517,6 +566,7 @@ public sealed class Window : IDrawableTarget
 		{
 			app.RunOnMainThread(StopTextInput);
 		}
+#endif
 	}
 	
 	/// <summary>
@@ -524,44 +574,46 @@ public sealed class Window : IDrawableTarget
 	/// </summary>
 	public void Focus()
 	{
+#if !BROWSER
 		SDL_RaiseWindow(Handle);
+#endif
 	}
 
-	internal void OnEvent(SDL_EventType ev)
+	internal void OnEvent(WindowEvent ev)
 	{
 		switch (ev)
 		{
-		case SDL_EventType.SDL_EVENT_WINDOW_FOCUS_GAINED:
+		case WindowEvent.FocusGained:
 			OnFocusGain?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_FOCUS_LOST:
+		case WindowEvent.FocusLost:
 			OnFocusLost?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_MOUSE_ENTER:
+		case WindowEvent.MouseEntered:
 			OnMouseEnter?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_MOUSE_LEAVE:
+		case WindowEvent.MouseLeft:
 			OnMouseLeave?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_RESIZED:
+		case WindowEvent.Resized:
 			OnResize?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_RESTORED:
+		case WindowEvent.Restored:
 			OnRestore?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_MAXIMIZED:
+		case WindowEvent.Maximized:
 			OnMaximize?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_MINIMIZED:
+		case WindowEvent.Minimized:
 			OnMinimize?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+		case WindowEvent.FullscreenEntered:
 			OnFullscreenEnter?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+		case WindowEvent.FullscreenExited:
 			OnFullscreenExit?.Invoke();
 			break;
-		case SDL_EventType.SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+		case WindowEvent.CloseRequested:
 			if (OnCloseRequested != null)
 				OnCloseRequested.Invoke();
 			else if (app.Window == this)

@@ -361,6 +361,7 @@ public sealed class Input
 	/// Loads 'gamecontrollerdb.txt' from a local file or falls back to the
 	/// default embedded SDL gamepad mappings
 	/// </summary>
+	[System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
 	static internal void AddDefaultSDLGamepadMappings(string relativePath)
 	{
 		var path = Path.Combine(relativePath, "gamecontrollerdb.txt");
@@ -374,10 +375,15 @@ public sealed class Input
 	/// By default, any 'gamecontrollerdb.txt' found adjacent to the application at runtime
 	/// will be loaded automatically.
 	/// </summary>
+	[System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
 	public static void AddSDLGamepadMappings(string[] mappings)
 	{
+#if BROWSER
+		throw new PlatformNotSupportedException();
+#else
 		foreach (var mapping in mappings)
 			SDL3.SDL.SDL_AddGamepadMapping(mapping);
+#endif
 	}
 
 	/// <summary>

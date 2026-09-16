@@ -91,7 +91,7 @@ public abstract class GraphicsDevice
 	internal abstract void WindowCreated(Window window);
 	internal abstract void WindowDestroyed(Window window);
 	internal abstract void Present();
-	internal abstract void OnEvent(SDL3.SDL.SDL_EventType type);
+	internal virtual void OnAppBackgroundChanged(bool backgrounded) { }
 
 	internal abstract ResourceHandle CreateTexture(string? name, int width, int height, int layers, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding);
 	internal abstract void SetTextureData(ResourceHandle texture, int layer, nint data, int length, RectInt destRegion);

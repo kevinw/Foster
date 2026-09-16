@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
+#if !BROWSER
 using static SDL3.SDL;
+#endif
 
 namespace Foster.Framework;
 
@@ -18,7 +20,9 @@ internal unsafe struct ImageData
 
 	private const int Components = 4;
 
+#if !BROWSER
 	private readonly SDL_Surface* surface;
+#endif
 	private readonly GCHandle arrayHandle;
 
 	public readonly int Width;
@@ -27,7 +31,17 @@ internal unsafe struct ImageData
 
 	public readonly Span<byte> Bytes => new((void*)Data, SizeInBytes);
 	public readonly Span<Color> Pixels => new((void*)Data, Width * Height);
-	public readonly nint Data => surface != null ? surface->pixels : arrayHandle.IsAllocated ? arrayHandle.AddrOfPinnedObject() : nint.Zero;
+	public readonly nint Data
+	{
+		get
+		{
+#if BROWSER
+			return arrayHandle.IsAllocated ? arrayHandle.AddrOfPinnedObject() : nint.Zero;
+#else
+			return surface != null ? surface->pixels : arrayHandle.IsAllocated ? arrayHandle.AddrOfPinnedObject() : nint.Zero;
+#endif
+		}
+	}
 
 	/// <summary>
 	/// Decode PNG or QOI image Data from a Stream
@@ -165,6 +179,9 @@ internal unsafe struct ImageData
 		}
 		else if (format == Formats.PNG)
 		{
+#if BROWSER
+			throw new PlatformNotSupportedException("PNG encoding is not implemented in the browser");
+#else
 			// write png
 			var mem = SDL_IOFromDynamicMem();
 			SDL_SavePNG_IO(new nint(surface), mem, false);
@@ -175,6 +192,7 @@ internal unsafe struct ImageData
 			var result = SDL_GetPointerProperty(props, SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, nint.Zero);
 			stream.Write(new ReadOnlySpan<byte>((byte*)result, (int)length));
 			SDL_CloseIO(mem);
+#endif
 		}
 		else
 			throw new NotImplementedException();
@@ -183,6 +201,7 @@ internal unsafe struct ImageData
 	/// <summary>
 	/// Creates the Image from an SDL Surface
 	/// </summary>
+#if !BROWSER
 	private ImageData(SDL_Surface* surface, GCHandle handle)
 	{
 		this.surface = surface;
@@ -190,10 +209,13 @@ internal unsafe struct ImageData
 		Width = surface->w;
 		Height = surface->h;
 	}
+#endif
 
 	private ImageData(GCHandle handle, int width, int height)
 	{
+#if !BROWSER
 		surface = null;
+#endif
 		arrayHandle = handle;
 		Width = width;
 		Height = height;
@@ -204,8 +226,10 @@ internal unsafe struct ImageData
 	/// </summary>
 	public void Free()
 	{
+#if !BROWSER
 		if (surface != null)
 			SDL_DestroySurface((nint)surface);
+#endif
 		if (arrayHandle.IsAllocated)
 			arrayHandle.Free();
 	}

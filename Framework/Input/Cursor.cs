@@ -1,4 +1,7 @@
+using System.Runtime.Versioning;
+#if !BROWSER
 using static SDL3.SDL;
+#endif
 
 namespace Foster.Framework;
 
@@ -67,12 +70,16 @@ public sealed class Cursor : IDisposable
 	/// </summary>
 	/// <param name="image">The Image for the Cursor to use</param>
 	/// <param name="focusPoint">The Focus Point of the Cursor, which is where active point is</param>
+	[UnsupportedOSPlatform("browser")]
 	public unsafe Cursor(Image image, Point2 focusPoint)
 	{
 		FocusPoint = focusPoint;
 		Size = image.Size;
 		SystemType = null;
 
+#if BROWSER
+		throw new PlatformNotSupportedException();
+#else
 		// create SDL surface from image
 		var surface = new nint(SDL_CreateSurfaceFrom(
 			image.Width,
@@ -90,22 +97,28 @@ public sealed class Cursor : IDisposable
 		// validate that cursor was created successfully
 		if (Handle == nint.Zero)
 			throw App.CreateExceptionFromSDL(nameof(SDL_CreateColorCursor));
+#endif
 	}
 
 	/// <summary>
 	/// Creates a new cursor from a built in System type.
 	/// Note that <seealso cref="FocusPoint"/> and <seealso cref="Size"/> will not have valid values.
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public unsafe Cursor(SystemTypes type)
 	{
 		FocusPoint = Point2.Zero;
 		Size = Point2.Zero;
 		SystemType = type;
+#if BROWSER
+		throw new PlatformNotSupportedException();
+#else
 		Handle = SDL_CreateSystemCursor((SDL_SystemCursor)type);
 
 		// validate that cursor was created successfully
 		if (Handle == nint.Zero)
 			throw App.CreateExceptionFromSDL(nameof(SDL_CreateSystemCursor));
+#endif
 	}
 
 	~Cursor()
@@ -120,7 +133,9 @@ public sealed class Cursor : IDisposable
 	{
 		if (Handle != nint.Zero)
 		{
+#if !BROWSER
 			SDL_DestroyCursor(Handle);
+#endif
 			Handle = nint.Zero;
 		}
 		GC.SuppressFinalize(this);

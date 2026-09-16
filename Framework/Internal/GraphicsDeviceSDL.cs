@@ -429,9 +429,9 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		}
 	}
 
-	internal override void OnEvent(SDL_EventType type)
+	internal override void OnAppBackgroundChanged(bool backgrounded)
 	{
-		if (type == SDL_EventType.SDL_EVENT_WILL_ENTER_BACKGROUND)
+		if (backgrounded)
 		{
 			// free window's backbuffers while they are hidden
 			foreach (var state in windows.Values)
@@ -442,11 +442,8 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 			}
 			inBackground = true;
 		}
-
-		if (type == SDL_EventType.SDL_EVENT_DID_ENTER_FOREGROUND)
-		{
+		else
 			inBackground = false;
-		}
 	}
 
 	private void PresentWindow(WindowState state)

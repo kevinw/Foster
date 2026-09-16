@@ -35,7 +35,12 @@
 
   <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
     <DefineConstants>$(DefineConstants);BROWSER</DefineConstants>
+    <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'DebugInterp' and ('$(RuntimeIdentifier)' == 'ios-arm64' or '$(RuntimeIdentifier)' == 'iossimulator-arm64' or '$(RuntimeIdentifier)' == 'iossimulator-x64')">
     <DefineConstants>$(DefineConstants);IOS_INTERP</DefineConstants>
@@ -110,6 +115,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(RuntimeIdentifier)' == 'browser-wasm'">
+    <Compile Remove="Internal/GraphicsDeviceSDL.cs;Internal/InputProviderSDL.cs;Internal/ThirdParty/SDL3.cs;Storage/ContentStorage.cs" />
     <Content Include="$(ProjectDir)Content/Web/**" CopyToOutputDirectory="PreserveNewest" />
     <NativeFileReference Include="$(ProjectDir)Internal/Native/browser/foster_png_decode.cpp" />
     <NativeFileReference Include="$(ProjectDir)Internal/Native/browser/lodepng/foster_lodepng.cpp" />

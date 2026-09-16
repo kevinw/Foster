@@ -1,6 +1,9 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+#if !BROWSER
 using static SDL3.SDL;
+#endif
 
 namespace Foster.Framework;
 
@@ -22,6 +25,7 @@ public sealed class FileSystem
 	/// It should not be left open for an extended amount of time.
 	/// User Storage is intended for dynamic save files and application settings.
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public void OpenUserStorage(Action<ContentStorage> onReady)
 	{
 		if (app.Disposed)
@@ -37,6 +41,7 @@ public sealed class FileSystem
 	/// It should not be left open for an extended amount of time.
 	/// User Storage is intended for dynamic save files and application settings.
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public async Task<ContentStorage> OpenUserStorageAsync()
 	{
 		if (app.Disposed)
@@ -49,6 +54,7 @@ public sealed class FileSystem
 	/// Opens a application title storage, and invokes a callback with the storage object when ready.
 	/// Title Storage is intended for Game Data and Assets.
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public void OpenTitleStorage(Action<ContentStorage> onReady)
 		=> OpenTitleStorage(null, onReady);
 
@@ -56,6 +62,7 @@ public sealed class FileSystem
 	/// Opens a application title storage, and invokes a callback with the storage object when ready.
 	/// Title Storage is intended for Game Data and Assets.
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public void OpenTitleStorage(string? path, Action<ContentStorage> onReady)
 	{
 		if (app.Disposed)
@@ -69,6 +76,7 @@ public sealed class FileSystem
 	/// This should not be awaited on from the Main thread.
 	/// Title Storage is intended for Game Data and Assets.
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public async Task<ContentStorage> OpenTitleStorageAsync(string? path = null)
 	{
 		if (app.Disposed)
@@ -77,6 +85,7 @@ public sealed class FileSystem
 		return await HandleOpenAsync(ContentStorage.OpenTitleStorage(path));
 	}
 
+	[UnsupportedOSPlatform("browser")]
 	private static void HandleOpenCallback(App app, ContentStorage storage, Action<ContentStorage> onReady)
 	{
 		if (storage.Ready)
@@ -97,6 +106,7 @@ public sealed class FileSystem
 		}
 	}
 
+	[UnsupportedOSPlatform("browser")]
 	private static async Task<ContentStorage> HandleOpenAsync(ContentStorage storage)
 	{
 		if (storage.Ready)
@@ -154,36 +164,42 @@ public sealed class FileSystem
 	/// <summary>
 	/// Shows an "Open File" Dialog
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public void OpenFileDialog(DialogCallback callback, bool allowMany = false)
 		=> OpenFileDialog(callback, [], null, allowMany);
 
 	/// <summary>
 	/// Shows an "Open File" Dialog
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public unsafe void OpenFileDialog(DialogCallback callback, DialogFilter[] filters, string? defaultLocation = null, bool allowMany = false)
 		=> ShowFileDialog(new(DialogModes.OpenFile, callback, filters, defaultLocation, allowMany));
 
 	/// <summary>
 	/// Shows an "Open File" Dialog
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public void OpenFolderDialog(DialogCallback callback, bool allowMany = false)
 		=> OpenFolderDialog(callback, null, allowMany);
 
 	/// <summary>
 	/// Shows an "Open Folder" Dialog
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public void OpenFolderDialog(DialogCallback callback, string? defaultLocation = null, bool allowMany = false)
 		=> ShowFileDialog(new(DialogModes.OpenFolder, callback, [], defaultLocation, allowMany));
 
 	/// <summary>
 	/// Shows a "Save File" Dialog
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public void SaveFileDialog(DialogCallbackSingleFile callback)
 		=> SaveFileDialog(callback, [], null);
 
 	/// <summary>
 	/// Shows a "Save File" Dialog
 	/// </summary>
+	[UnsupportedOSPlatform("browser")]
 	public unsafe void SaveFileDialog(DialogCallbackSingleFile callback, DialogFilter[] filters, string? defaultLocation = null)
 	{
 		void Singular(string[] files, DialogResult result)
@@ -212,8 +228,12 @@ public sealed class FileSystem
 		DialogCallback Callback
 	);
 
+	[UnsupportedOSPlatform("browser")]
 	private unsafe void ShowFileDialog(DialogProperties properties)
 	{
+#if BROWSER
+		throw new PlatformNotSupportedException();
+#else
 		// [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
 		static void CallbackFromSDL(nint userdata, nint files, int filter)
 		{
@@ -310,5 +330,6 @@ public sealed class FileSystem
 
 		// SDL docs say that showing file dialogs must be invoked from the Main Thread
 		app.RunOnMainThread(() => Show(app, properties));
+#endif
 	}
 }
