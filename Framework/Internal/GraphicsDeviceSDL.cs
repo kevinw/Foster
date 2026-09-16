@@ -429,6 +429,8 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		}
 	}
 
+	internal override void SubmitPendingCommandsCore() => FlushCommands(stall: false);
+
 	internal override void OnAppBackgroundChanged(bool backgrounded)
 	{
 		if (backgrounded)
@@ -1633,12 +1635,25 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		}
 
 		// dispatch
-		SDL_DispatchGPUCompute(
-			computePass,
-			(uint)command.GroupCountX,
-			(uint)command.GroupCountY,
-			(uint)command.GroupCountZ
-		);
+		var debugGroup = ActiveGpuDebugGroup;
+		if (string.IsNullOrEmpty(debugGroup))
+			debugGroup = shader.Name;
+		if (!string.IsNullOrEmpty(debugGroup))
+			SDL_PushGPUDebugGroup(cmdRender, debugGroup);
+		try
+		{
+			SDL_DispatchGPUCompute(
+				computePass,
+				(uint)command.GroupCountX,
+				(uint)command.GroupCountY,
+				(uint)command.GroupCountZ
+			);
+		}
+		finally
+		{
+			if (!string.IsNullOrEmpty(debugGroup))
+				SDL_PopGPUDebugGroup(cmdRender);
+		}
 
 		SDL_EndGPUComputePass(computePass);
 	}

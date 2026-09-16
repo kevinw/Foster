@@ -91,7 +91,12 @@ public abstract class GraphicsDevice
 	internal abstract void WindowCreated(Window window);
 	internal abstract void WindowDestroyed(Window window);
 	internal abstract void Present();
+	internal abstract void SubmitPendingCommandsCore();
 	internal virtual void OnAppBackgroundChanged(bool backgrounded) { }
+
+	// Submits commands recorded so far without presenting a window. Later commands are
+	// recorded into a new command buffer.
+	public void SubmitPendingCommands() => SubmitPendingCommandsCore();
 
 	internal abstract ResourceHandle CreateTexture(string? name, int width, int height, int layers, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding);
 	internal abstract void SetTextureData(ResourceHandle texture, int layer, nint data, int length, RectInt destRegion);
@@ -141,7 +146,7 @@ public abstract class GraphicsDevice
 	internal abstract void Clear(IDrawableTarget target, ReadOnlySpan<Color> color, float depth, int stencil, ClearMask mask);
 
 	/// <summary>
-	/// Names draw commands submitted inside this scope for GPU debugging tools.
+	/// Names draw and compute commands submitted inside this scope for GPU debugging tools.
 	/// </summary>
 	public GpuDebugScope DebugGroup(string name)
 		=> new(this, name);

@@ -87,6 +87,13 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 		frameBegun = false;
 	}
 
+	internal override void SubmitPendingCommandsCore()
+	{
+		if (frameBegun)
+			BrowserWebGPU.Submit();
+		frameBegun = false;
+	}
+
 	internal override ResourceHandle CreateTexture(string? name, int width, int height, int layers, TextureFormat format, TextureFlags flags, SampleCount sampleCount, nint? targetBinding)
 	{
 		if (!format.IsColorFormat())

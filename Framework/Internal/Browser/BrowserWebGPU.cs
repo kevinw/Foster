@@ -155,6 +155,9 @@ internal static partial class BrowserWebGPU
 	[JSImport("present", "FosterWebGPU")]
 	internal static partial void Present();
 
+	[JSImport("submit", "FosterWebGPU")]
+	internal static partial void Submit();
+
 	[JSImport("dispatchCompute", "FosterWebGPU")]
 	internal static partial void DispatchCompute(
 		int shader,

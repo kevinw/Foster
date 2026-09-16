@@ -1065,11 +1065,7 @@ export function tryReadTextureDownload(slot, length) {
 	return available === tight.length ? tight : tight.slice(0, available);
 }
 
-export function present() {
-	endPass();
-	if (pendingClears.has(0))
-		ensurePass(0);
-	endPass();
+function submitEncoder() {
 	if (encoder) {
 		device.queue.submit([encoder.finish()]);
 		encoder = null;
@@ -1109,4 +1105,17 @@ export function present() {
 				buffer.destroy();
 		});
 	}
+}
+
+export function submit() {
+	endPass();
+	submitEncoder();
+}
+
+export function present() {
+	endPass();
+	if (pendingClears.has(0))
+		ensurePass(0);
+	endPass();
+	submitEncoder();
 }
