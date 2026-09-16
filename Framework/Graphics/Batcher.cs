@@ -770,10 +770,10 @@ public class Batcher : IDisposable
 	{
 		Request(4, 6, out var vertices, out var indices, out var offset);
 
-		vertices[0].Pos = Vector2.Transform(v0, Matrix);
-		vertices[1].Pos = Vector2.Transform(v1, Matrix);
-		vertices[2].Pos = Vector2.Transform(v2, Matrix);
-		vertices[3].Pos = Vector2.Transform(v3, Matrix);
+		vertices[0].Pos = Pos(v0);
+		vertices[1].Pos = Pos(v1);
+		vertices[2].Pos = Pos(v2);
+		vertices[3].Pos = Pos(v3);
 		vertices[0].Col = color;
 		vertices[1].Col = color;
 		vertices[2].Col = color;
@@ -796,10 +796,10 @@ public class Batcher : IDisposable
 		SetTexture(texture);
 		Request(4, 6, out var vertices, out var indices, out var offset);
 
-		vertices[0].Pos = Vector2.Transform(v0, Matrix);
-		vertices[1].Pos = Vector2.Transform(v1, Matrix);
-		vertices[2].Pos = Vector2.Transform(v2, Matrix);
-		vertices[3].Pos = Vector2.Transform(v3, Matrix);
+		vertices[0].Pos = Pos(v0);
+		vertices[1].Pos = Pos(v1);
+		vertices[2].Pos = Pos(v2);
+		vertices[3].Pos = Pos(v3);
 		vertices[0].Tex = t0;
 		vertices[1].Tex = t1;
 		vertices[2].Tex = t2;
@@ -825,10 +825,10 @@ public class Batcher : IDisposable
 	{
 		Request(4, 6, out var vertices, out var indices, out var offset);
 
-		vertices[0].Pos = Vector2.Transform(v0, Matrix);
-		vertices[1].Pos = Vector2.Transform(v1, Matrix);
-		vertices[2].Pos = Vector2.Transform(v2, Matrix);
-		vertices[3].Pos = Vector2.Transform(v3, Matrix);
+		vertices[0].Pos = Pos(v0);
+		vertices[1].Pos = Pos(v1);
+		vertices[2].Pos = Pos(v2);
+		vertices[3].Pos = Pos(v3);
 		vertices[0].Col = c0;
 		vertices[1].Col = c1;
 		vertices[2].Col = c2;
@@ -851,10 +851,10 @@ public class Batcher : IDisposable
 		SetTexture(texture);
 		Request(4, 6, out var vertices, out var indices, out var offset);
 
-		vertices[0].Pos = Vector2.Transform(v0, Matrix);
-		vertices[1].Pos = Vector2.Transform(v1, Matrix);
-		vertices[2].Pos = Vector2.Transform(v2, Matrix);
-		vertices[3].Pos = Vector2.Transform(v3, Matrix);
+		vertices[0].Pos = Pos(v0);
+		vertices[1].Pos = Pos(v1);
+		vertices[2].Pos = Pos(v2);
+		vertices[3].Pos = Pos(v3);
 		vertices[0].Tex = t0;
 		vertices[1].Tex = t1;
 		vertices[2].Tex = t2;
@@ -905,9 +905,9 @@ public class Batcher : IDisposable
 	{
 		Request(3, 3, out var vertices, out var indices, out var offset);
 
-		vertices[0].Pos = Vector2.Transform(v0, Matrix);
-		vertices[1].Pos = Vector2.Transform(v1, Matrix);
-		vertices[2].Pos = Vector2.Transform(v2, Matrix);
+		vertices[0].Pos = Pos(v0);
+		vertices[1].Pos = Pos(v1);
+		vertices[2].Pos = Pos(v2);
 		vertices[0].Col = color;
 		vertices[1].Col = color;
 		vertices[2].Col = color;
@@ -924,9 +924,9 @@ public class Batcher : IDisposable
 	{
 		Request(3, 3, out var vertices, out var indices, out var offset);
 
-		vertices[0].Pos = Vector2.Transform(v0, Matrix);
-		vertices[1].Pos = Vector2.Transform(v1, Matrix);
-		vertices[2].Pos = Vector2.Transform(v2, Matrix);
+		vertices[0].Pos = Pos(v0);
+		vertices[1].Pos = Pos(v1);
+		vertices[2].Pos = Pos(v2);
 		vertices[0].Col = c0;
 		vertices[1].Col = c1;
 		vertices[2].Col = c2;
@@ -952,9 +952,9 @@ public class Batcher : IDisposable
 		SetTexture(texture);
 		Request(3, 3, out var vertices, out var indices, out var offset);
 
-		vertices[0].Pos = Vector2.Transform(v0, Matrix);
-		vertices[1].Pos = Vector2.Transform(v1, Matrix);
-		vertices[2].Pos = Vector2.Transform(v2, Matrix);
+		vertices[0].Pos = Pos(v0);
+		vertices[1].Pos = Pos(v1);
+		vertices[2].Pos = Pos(v2);
 		vertices[0].Tex = t0;
 		vertices[1].Tex = t1;
 		vertices[2].Tex = t2;
@@ -1159,18 +1159,18 @@ public class Batcher : IDisposable
 			{
 				Request(12, 30, out var vertexDest, out var indexDest, out var vs);
 
-				vertexDest[0] = new(Vector2.Transform(r0_tr, Matrix), color, FillMode);
-				vertexDest[1] = new(Vector2.Transform(r0_br, Matrix), color, FillMode);
-				vertexDest[2] = new(Vector2.Transform(r0_bl, Matrix), color, FillMode);
-				vertexDest[3] = new(Vector2.Transform(r1_tl, Matrix), color, FillMode);
-				vertexDest[4] = new(Vector2.Transform(r1_br, Matrix), color, FillMode);
-				vertexDest[5] = new(Vector2.Transform(r1_bl, Matrix), color, FillMode);
-				vertexDest[6] = new(Vector2.Transform(r2_tl, Matrix), color, FillMode);
-				vertexDest[7] = new(Vector2.Transform(r2_tr, Matrix), color, FillMode);
-				vertexDest[8] = new(Vector2.Transform(r2_bl, Matrix), color, FillMode);
-				vertexDest[9] = new(Vector2.Transform(r3_tl, Matrix), color, FillMode);
-				vertexDest[10] = new(Vector2.Transform(r3_tr, Matrix), color, FillMode);
-				vertexDest[11] = new(Vector2.Transform(r3_br, Matrix), color, FillMode);
+				vertexDest[0] = new(Pos(r0_tr), color, FillMode);
+				vertexDest[1] = new(Pos(r0_br), color, FillMode);
+				vertexDest[2] = new(Pos(r0_bl), color, FillMode);
+				vertexDest[3] = new(Pos(r1_tl), color, FillMode);
+				vertexDest[4] = new(Pos(r1_br), color, FillMode);
+				vertexDest[5] = new(Pos(r1_bl), color, FillMode);
+				vertexDest[6] = new(Pos(r2_tl), color, FillMode);
+				vertexDest[7] = new(Pos(r2_tr), color, FillMode);
+				vertexDest[8] = new(Pos(r2_bl), color, FillMode);
+				vertexDest[9] = new(Pos(r3_tl), color, FillMode);
+				vertexDest[10] = new(Pos(r3_tr), color, FillMode);
+				vertexDest[11] = new(Pos(r3_br), color, FillMode);
 
 				// top quad
 				indexDest[00] = vs + 00; /* r0b */ indexDest[01] = vs + 03; /* r1a */ indexDest[02] = vs + 05; /* r1d */
@@ -1318,12 +1318,12 @@ public class Batcher : IDisposable
 		Request(steps + 1, steps * 3, out var vertices, out var indices, out var vertexStart);
 
 		// center vertex
-		vertices[0] = new(Vector2.Transform(center, Matrix), centerColor, FillMode);
+		vertices[0] = new(Pos(center), centerColor, FillMode);
 
 		for (int n = 0, i = 0; n < steps; n++, i += 3)
 		{
 			var next = Calc.AngleToVector(n / (float)steps * Calc.TAU, radius);
-			vertices[n + 1] = new(Vector2.Transform(center + next, Matrix), edgeColor, FillMode);
+			vertices[n + 1] = new(Pos(center + next), edgeColor, FillMode);
 			indices[i + 0] = vertexStart; // center
 			indices[i + 1] = vertexStart + 1 + n;
 			indices[i + 2] = vertexStart + 1 + (n + 1) % steps;
@@ -1373,6 +1373,45 @@ public class Batcher : IDisposable
 
 	public void CircleDashed(in Circle circle, float lineWeight, int steps, in Color color, float dashLength, float dashOffset)
 		=> CircleDashed(circle.Position, circle.Radius, lineWeight, steps, color, dashLength, dashOffset);
+
+	// Tapered capsule: trapezoid body + optional full-circle caps at each end, in a single draw call.
+	public void Capsule(in Vector2 from, in Vector2 to, float fromRadius, float toRadius, int steps, in Color color, bool fromCap = true, bool toCap = true)
+	{
+		var vCount = 4 + (fromCap ? steps + 1 : 0) + (toCap ? steps + 1 : 0);
+		var iCount = 6 + (fromCap ? steps * 3 : 0) + (toCap ? steps * 3 : 0);
+		Request(vCount, iCount, out var v, out var ix, out var s);
+
+		var along = (to - from).Normalized();
+		var across = along.TurnLeft();
+		v[0] = new(Pos(from + across * fromRadius), color, FillMode);
+		v[1] = new(Pos(from - across * fromRadius), color, FillMode);
+		v[2] = new(Pos(to - across * toRadius), color, FillMode);
+		v[3] = new(Pos(to + across * toRadius), color, FillMode);
+		ix[0] = s; ix[1] = s + 1; ix[2] = s + 2;
+		ix[3] = s; ix[4] = s + 2; ix[5] = s + 3;
+
+		var vi = 4;
+		var ii = 6;
+		if (fromCap)
+		{
+			v[vi] = new(Pos(from), color, FillMode);
+			for (var i = 0; i < steps; i++)
+			{
+				v[vi + 1 + i] = new(Pos(from + Calc.AngleToVector(i / (float)steps * Calc.TAU, fromRadius)), color, FillMode);
+				ix[ii++] = s + vi; ix[ii++] = s + vi + 1 + i; ix[ii++] = s + vi + 1 + (i + 1) % steps;
+			}
+			vi += steps + 1;
+		}
+		if (toCap)
+		{
+			v[vi] = new(Pos(to), color, FillMode);
+			for (var i = 0; i < steps; i++)
+			{
+				v[vi + 1 + i] = new(Pos(to + Calc.AngleToVector(i / (float)steps * Calc.TAU, toRadius)), color, FillMode);
+				ix[ii++] = s + vi; ix[ii++] = s + vi + 1 + i; ix[ii++] = s + vi + 1 + (i + 1) % steps;
+			}
+		}
+	}
 
 	#endregion
 
@@ -1791,6 +1830,9 @@ public class Batcher : IDisposable
 	#endregion
 
 	#region Internal Utils
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private Vector2 Pos(in Vector2 v) => Vector2.Transform(v, Matrix);
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
 	private void Request(int vertexAppendCount, int indexAppendCount, out Span<BatcherVertex> vertices, out Span<int> indices, out int vertexOffset)
