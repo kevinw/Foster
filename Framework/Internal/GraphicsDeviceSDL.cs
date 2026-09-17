@@ -75,6 +75,10 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		public bool SupportsMailboxPresentMode;
 		public bool SupportsImmediatePresentMode;
 		public SDL_GPUPresentMode? PresentMode;
+		public nint EarlySwapchain;
+		public uint EarlyWidth;
+		public uint EarlyHeight;
+		public bool EarlyAcquired;
 	}
 
 	private record struct ClearInfo(StackList8<Color>? Color, float? Depth, int? Stencil);
@@ -90,6 +94,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 	private nint device;
 	private nint cmdUpload;
 	private nint cmdRender;
+	private nint cmdPresent;
 	private nint renderPass;
 	private nint copyPass;
 
@@ -142,6 +147,8 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 	private readonly Exception deviceWasDestroyed = new("This Resource was created with a previous GPU Device which has been destroyed");
 
 	private readonly GraphicsDriver preferred = preferred;
+	private int framesInFlight = framesInFlight;
+	private bool framesInFlightChanged;
 	private AppFlags flags;
 
 	public override GraphicsDriver Driver => driver;
@@ -157,6 +164,18 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 			vsyncEnabled = value;
 			foreach (var state in windows.Values)
 				UpdateWindowPresentMode(state, value);
+		}
+	}
+
+	public override int FramesInFlight
+	{
+		get => framesInFlight;
+		set
+		{
+			if (value is < 1 or > MaxFramesInFlight)
+				throw new ArgumentOutOfRangeException(nameof(value), value, $"Must be between 1 and {MaxFramesInFlight}.");
+			framesInFlightChanged |= device != nint.Zero && value != framesInFlight;
+			framesInFlight = value;
 		}
 	}
 
@@ -346,8 +365,9 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 	{
 		// submit remaining commands
 		FlushCommands(stall: false);
-		SDL_SubmitGPUCommandBuffer(cmdUpload);
 		SDL_SubmitGPUCommandBuffer(cmdRender);
+		if (cmdPresent != nint.Zero)
+			SDL_SubmitGPUCommandBuffer(cmdPresent);
 		SDL_WaitForGPUIdle(device);
 
 		// destroy default texture
@@ -405,6 +425,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		// clear state
 		cmdUpload = nint.Zero;
 		cmdRender = nint.Zero;
+		cmdPresent = nint.Zero;
 		renderPass = nint.Zero;
 		copyPass = nint.Zero;
 		renderPassTarget = null;
@@ -417,7 +438,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		EndRenderPass();
 
 		// don't present to the screen if we're not visible
-		if (inBackground)
+		if (inBackground && cmdPresent == nint.Zero)
 		{
 			FlushCommands(stall: false);
 			return;
@@ -429,6 +450,19 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 
 		// submit and present to screen
 		FlushCommands(stall: false);
+		if (cmdPresent != nint.Zero)
+		{
+			SDL_SubmitGPUCommandBuffer(cmdPresent);
+			cmdPresent = nint.Zero;
+		}
+
+		// swapchains may be recreated, so only once nothing holds a swapchain texture
+		if (framesInFlightChanged)
+		{
+			framesInFlightChanged = false;
+			if (!SDL_SetGPUAllowedFramesInFlight(device, (uint)framesInFlight))
+				Log.Warning(App.CreateErrorMessageFromSDL(nameof(SDL_SetGPUAllowedFramesInFlight)));
+		}
 
 		// reclaim any pending windows
 		foreach (var state in windows.Values)
@@ -439,6 +473,25 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 	}
 
 	internal override void SubmitPendingCommandsCore() => FlushCommands(stall: false);
+
+	// Acquires each window's swapchain texture on a dedicated command buffer, blocking on the
+	// frames-in-flight limit and display pacing here instead of in Present. It is submitted last
+	// in Present, so SubmitPendingCommands mid-frame never presents an unfinished frame.
+	internal override void WaitForSwapchains()
+	{
+		if (inBackground || cmdPresent != nint.Zero)
+			return;
+		cmdPresent = SDL_AcquireGPUCommandBuffer(device);
+		foreach (var state in windows.Values)
+		{
+			if (!state.Claimed || state.ReclaimPending || (SDL_GetWindowFlags(state.Handle) & SDL_WindowFlags.SDL_WINDOW_HIDDEN) != 0)
+				continue;
+			if (SDL_WaitAndAcquireGPUSwapchainTexture(cmdPresent, state.Handle, out state.EarlySwapchain, out state.EarlyWidth, out state.EarlyHeight))
+				state.EarlyAcquired = true;
+			else
+				Log.Warning(App.CreateErrorMessageFromSDL(nameof(SDL_WaitAndAcquireGPUSwapchainTexture)));
+		}
+	}
 
 	internal override void OnAppBackgroundChanged(bool backgrounded)
 	{
@@ -459,20 +512,32 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 
 	private void PresentWindow(WindowState state)
 	{
-		// on some platforms, like Android, it's possible to lose the underlying surface when
-		// we move the app to the background. Account for that, and reclaim the window when we resume.
-		if (state.ReclaimPending)
-			return;
-
-		// if the window is hidden, we do not draw to it
-		if ((SDL_GetWindowFlags(state.Handle) & SDL_WindowFlags.SDL_WINDOW_HIDDEN) != 0)
-			return;
-
-		// get the swapchain for this window
-		if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmdRender, state.Handle, out var scTex, out var scW, out var scH))
+		var cmd = cmdPresent;
+		nint scTex;
+		uint scW, scH;
+		if (state.EarlyAcquired)
 		{
-			Log.Warning(App.CreateErrorMessageFromSDL(nameof(SDL_WaitAndAcquireGPUSwapchainTexture)));
-			return;
+			(scTex, scW, scH) = (state.EarlySwapchain, state.EarlyWidth, state.EarlyHeight);
+			state.EarlyAcquired = false;
+		}
+		else
+		{
+			// on some platforms, like Android, it's possible to lose the underlying surface when
+			// we move the app to the background. Account for that, and reclaim the window when we resume.
+			if (state.ReclaimPending)
+				return;
+
+			// if the window is hidden, we do not draw to it
+			if ((SDL_GetWindowFlags(state.Handle) & SDL_WindowFlags.SDL_WINDOW_HIDDEN) != 0)
+				return;
+
+			// get the swapchain for this window
+			cmd = cmdRender;
+			if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd, state.Handle, out scTex, out scW, out scH))
+			{
+				Log.Warning(App.CreateErrorMessageFromSDL(nameof(SDL_WaitAndAcquireGPUSwapchainTexture)));
+				return;
+			}
 		}
 
 		// blit backbuffer to swapchain
@@ -506,7 +571,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 				cycle = false
 			};
 
-			SDL_BlitGPUTexture(cmdRender, blit);
+			SDL_BlitGPUTexture(cmd, blit);
 		}
 
 		// update buffer size (if non-zero swapchain size)
@@ -1697,11 +1762,14 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		// submit buffers
 		if (stall)
 		{
-			var uploadFence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmdUpload);
-			if (uploadFence != nint.Zero)
-				fences.Add(uploadFence);
-			else
-				Log.Warning($"Failed to acquire upload fence: {SDL_GetError()}");
+			if (cmdUpload != nint.Zero)
+			{
+				var uploadFence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmdUpload);
+				if (uploadFence != nint.Zero)
+					fences.Add(uploadFence);
+				else
+					Log.Warning($"Failed to acquire upload fence: {SDL_GetError()}");
+			}
 
 			var renderFence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmdRender);
 			if (renderFence != nint.Zero)
@@ -1711,7 +1779,8 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		}
 		else
 		{
-			SDL_SubmitGPUCommandBuffer(cmdUpload);
+			if (cmdUpload != nint.Zero)
+				SDL_SubmitGPUCommandBuffer(cmdUpload);
 			SDL_SubmitGPUCommandBuffer(cmdRender);
 		}
 
@@ -1735,7 +1804,6 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 			throw new Exception("Must submit previous command buffers!");
 
 		cmdRender = SDL_AcquireGPUCommandBuffer(device);
-		cmdUpload = SDL_AcquireGPUCommandBuffer(device);
 
 		textureUploadBufferOffset = 0;
 		textureUploadCycleCount = 0;
@@ -1750,6 +1818,8 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 			FlushCommands(stall: false);
 		if (copyPass != nint.Zero)
 			return;
+		if (cmdUpload == nint.Zero)
+			cmdUpload = SDL_AcquireGPUCommandBuffer(device);
 		copyPass = SDL_BeginGPUCopyPass(cmdUpload);
 	}
 

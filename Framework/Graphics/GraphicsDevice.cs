@@ -51,6 +51,14 @@ public abstract class GraphicsDevice
 	/// </summary>
 	public abstract bool VSync { get; set; }
 
+	// Maximum frames that may be queued on the GPU, from 1 to 3. A runtime change applies at the end
+	// of the frame's Present and stalls until in-flight work finishes.
+	public abstract int FramesInFlight { get; set; }
+
+	// Acquires the swapchain before input is polled and the update runs, rather than inside Present
+	// after the frame is built, so frames-in-flight and display-pacing waits don't age the input.
+	public bool WaitBeforeUpdate { get; set; }
+
 	/// <summary>
 	/// How long the previous present call took on the CPU.
 	/// </summary>
@@ -92,6 +100,7 @@ public abstract class GraphicsDevice
 	internal abstract void WindowDestroyed(Window window);
 	internal abstract void Present();
 	internal abstract void SubmitPendingCommandsCore();
+	internal virtual void WaitForSwapchains() { }
 	internal virtual void OnAppBackgroundChanged(bool backgrounded) { }
 
 	// Submits commands recorded so far without presenting a window. Later commands are

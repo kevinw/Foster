@@ -7,6 +7,7 @@ internal class GraphicsDeviceHeadless(App app) : GraphicsDevice(app)
 	public override GraphicsDriver Driver => GraphicsDriver.Headless;
 	public override bool Disposed => disposed;
 	public override bool VSync { get; set; }
+	public override int FramesInFlight { get; set; } = 1;
 	public override void InsertDebugLabel(string text) { }
 
 	private bool disposed;

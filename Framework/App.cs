@@ -660,6 +660,9 @@ public abstract partial class App : IDisposable
 			Update();
 		}
 
+		if (GraphicsDevice.WaitBeforeUpdate)
+			GraphicsDevice.WaitForSwapchains();
+
 		var update = UpdateMode;
 		var currentTime = timer.Elapsed;
 		var deltaTime = currentTime - lastUpdateTime;

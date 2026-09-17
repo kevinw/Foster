@@ -63,6 +63,7 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 	public override GraphicsDriver Driver => GraphicsDriver.WebGPU;
 	public override bool Disposed => disposed;
 	public override bool VSync { get; set; } = true;
+	public override int FramesInFlight { get; set; } = 1;
 	public override void InsertDebugLabel(string text) { }
 
 	internal override void CreateDevice(in AppFlags flags)
