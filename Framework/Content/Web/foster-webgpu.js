@@ -4,6 +4,7 @@ let canvas = null;
 let context = null;
 let device = null;
 let swapchainFormat = null;
+let adapterInfo = "";
 let encoder = null;
 let pass = null;
 let activeTarget = null;
@@ -387,6 +388,10 @@ function ensurePass(targetHandle) {
 	return info;
 }
 
+export function getAdapterInfo() {
+	return adapterInfo;
+}
+
 export async function initialize(canvasSelector) {
 	if (!navigator.gpu)
 		throw new Error("WebGPU is not available in this browser.");
@@ -398,6 +403,9 @@ export async function initialize(canvasSelector) {
 	const adapter = await navigator.gpu.requestAdapter();
 	if (!adapter)
 		throw new Error("WebGPU adapter was not available.");
+	// Browsers may blank some fields for privacy; keep whatever they report.
+	const info = adapter.info ?? {};
+	adapterInfo = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(" ");
 
 	device = await adapter.requestDevice();
 	device.addEventListener("uncapturederror", event => {

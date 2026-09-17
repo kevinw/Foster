@@ -69,6 +69,11 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 	{
 		BrowserWebGPU.Initialize("#foster-canvas");
 		disposed = false;
+		if (!flags.Has(AppFlags.NoHeaderLog))
+		{
+			var adapter = BrowserWebGPU.GetAdapterInfo();
+			Log.Info($"Graphics Driver: WebGPU{(adapter.Length > 0 ? $" | {adapter}" : "")}");
+		}
 	}
 
 	internal override void DestroyDevice()

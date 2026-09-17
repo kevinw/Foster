@@ -8,6 +8,9 @@ internal static partial class BrowserWebGPU
 	[JSImport("ensureInitialized", "FosterWebGPU")]
 	internal static partial void Initialize(string canvasSelector);
 
+	[JSImport("getAdapterInfo", "FosterWebGPU")]
+	internal static partial string GetAdapterInfo();
+
 	[JSImport("resizeCanvas", "FosterWebGPU")]
 	internal static partial void ResizeCanvas(int width, int height);
 

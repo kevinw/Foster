@@ -221,7 +221,16 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		}
 
 		if (!flags.Has(AppFlags.NoHeaderLog))
-			Log.Info($"Graphics Driver: SDL_GPU [{driverName}]");
+		{
+			// Adapter name and driver details, for whichever of them the backend reports.
+			var props = SDL_GetGPUDeviceProperties(device);
+			var adapter = string.Join(" | ", new[] {
+				SDL_GetStringProperty(props, SDL_PROP_GPU_DEVICE_NAME_STRING, ""),
+				SDL_GetStringProperty(props, SDL_PROP_GPU_DEVICE_DRIVER_VERSION_STRING, ""),
+				SDL_GetStringProperty(props, SDL_PROP_GPU_DEVICE_DRIVER_INFO_STRING, ""),
+			}.Where(value => !string.IsNullOrWhiteSpace(value)));
+			Log.Info($"Graphics Driver: SDL_GPU [{driverName}]{(adapter.Length > 0 ? $" | {adapter}" : "")}");
+		}
 
 		// we always have a command buffer ready
 		ResetCommandBufferState();
