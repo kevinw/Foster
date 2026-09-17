@@ -194,6 +194,28 @@ public sealed class Window : IDrawableTarget
 	}
 
 	/// <summary>
+	/// Gets the Size of the Display that the Window is currently in, in pixels.
+	/// On high DPI displays this may differ from DisplaySize.
+	/// </summary>
+	public unsafe Point2 DisplaySizeInPixels
+	{
+		get
+		{
+#if BROWSER
+			return SizeInPixels;
+#else
+			if (Handle == nint.Zero)
+				throw closedWindowException;
+			var index = SDL_GetDisplayForWindow(Handle);
+			var mode = (SDL_DisplayMode*)SDL_GetCurrentDisplayMode(index);
+			if (mode == null)
+				return Point2.Zero;
+			return new((int)MathF.Round(mode->w * mode->pixel_density), (int)MathF.Round(mode->h * mode->pixel_density));
+#endif
+		}
+	}
+
+	/// <summary>
 	/// Gets the Content Scale for the Window.
 	/// </summary>
 	public Vector2 ContentScale
@@ -418,7 +440,7 @@ public sealed class Window : IDrawableTarget
 	/// <summary>
 	/// Creates a new Window
 	/// </summary>
-	public Window(App app, string title, int width, int height, bool fullscreen = false, bool resizable = true)
+	public Window(App app, string title, int width, int height, bool fullscreen = false, bool resizable = true, bool scaleToDisplay = false)
 	{
 		this.app = app;
 		this.title = title;
@@ -439,13 +461,32 @@ public sealed class Window : IDrawableTarget
 		if (resizable)
 			windowFlags |= SDL_WindowFlags.SDL_WINDOW_RESIZABLE;
 
-		Handle = SDL_CreateWindow(title, width, height, windowFlags);
+		var scale = scaleToDisplay ? DisplayWindowScale(width, height) : 1;
+		Handle = SDL_CreateWindow(title, (int)(width * scale), (int)(height * scale), windowFlags);
 		if (Handle == nint.Zero)
 			throw App.CreateExceptionFromSDL(nameof(SDL_CreateWindow));
 		ID = SDL_GetWindowID(Handle);
 #endif
 		app.WindowCreated(this);
 	}
+
+#if !BROWSER
+	/// <summary>
+	/// Scale that makes a creation size logical (see <see cref="AppFlags.ScaleWindowToDisplay"/>).
+	/// macOS already measures windows in points, but Windows (and X11) measure them in pixels, so a
+	/// scaled display needs them grown by its content scale. Capped so the window still fits.
+	/// </summary>
+	static unsafe float DisplayWindowScale(int width, int height)
+	{
+		var display = SDL_GetPrimaryDisplay();
+		var mode = SDL_GetDesktopDisplayMode(display);
+		if (mode == null || mode->pixel_density <= 0 || width <= 0 || height <= 0)
+			return 1;
+		var scale = SDL_GetDisplayContentScale(display) / mode->pixel_density;
+		scale = MathF.Min(scale, 0.9f * MathF.Min(mode->w / (float)width, mode->h / (float)height));
+		return MathF.Max(scale, 1);
+	}
+#endif
 
 	/// <summary>
 	/// Destroys the Window.

@@ -83,6 +83,12 @@ public enum AppFlags
 
 	// Creates a GPU device without a Window or swapchain, for offscreen rendering tools.
 	Offscreen = 1 << 4,
+
+	/// <summary>
+	/// Treat the Window Width/Height as logical sizes: on platforms that measure windows in
+	/// pixels (Windows, X11), grow them by the display's content scale. No effect on macOS.
+	/// </summary>
+	ScaleWindowToDisplay = 1 << 5,
 }
 
 /// <summary>
@@ -289,7 +295,8 @@ public abstract partial class App : IDisposable
 			FileSystem = new(this);
 			GraphicsDevice = new GraphicsDeviceWebGPU(this);
 			GraphicsDevice.CreateDevice(config.Flags);
-			Window = new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable);
+			Window = new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable,
+				config.Flags.Has(AppFlags.ScaleWindowToDisplay));
 		}
 #else
 		else
@@ -331,7 +338,8 @@ public abstract partial class App : IDisposable
 			GraphicsDevice = new GraphicsDeviceSDL(this, config.PreferredGraphicsDriver, config.FramesInFlight);
 			GraphicsDevice.CreateDevice(config.Flags);
 			Window = config.Flags.Has(AppFlags.Offscreen) ? null :
-				new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable);
+				new Window(this, config.WindowTitle, config.Width, config.Height, config.Fullscreen, config.Resizable,
+					config.Flags.Has(AppFlags.ScaleWindowToDisplay));
 
 			// try to load default SDL gamepad mappings
 			Input.AddDefaultSDLGamepadMappings(AppContext.BaseDirectory);
