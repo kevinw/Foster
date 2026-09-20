@@ -2160,6 +2160,23 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		return pipeline;
 	}
 
+	public override Image CaptureScreenshot(Window window)
+	{
+		var target = GetDrawTarget(window, out var size)
+			?? throw new InvalidOperationException("Window has no backbuffer to capture.");
+		var image = new Image(size.X, size.Y);
+		try
+		{
+			target.Attachments[0].GetData(image.Data, new RectInt(Point2.Zero, size));
+			return image;
+		}
+		catch
+		{
+			image.Dispose();
+			throw;
+		}
+	}
+
 	private Target? GetDrawTarget(IDrawableTarget drawableTarget, out Point2 size)
 	{
 		// get specific target

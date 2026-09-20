@@ -36,6 +36,10 @@ public abstract class GraphicsDevice
 	/// </summary>
 	public abstract GraphicsDriver Driver { get; }
 
+	// Captures the window's current rendered pixels before presentation. Caller owns the image.
+	public virtual Image CaptureScreenshot(Window window)
+		=> throw new NotSupportedException("Window screenshots are not supported by this graphics driver.");
+
 	/// <summary>
 	/// The Application this GraphicsDevice belongs to
 	/// </summary>
