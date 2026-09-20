@@ -172,6 +172,52 @@ public sealed class Window : IDrawableTarget
 		}
 	}
 
+	/// Identifies the Display that the Window is currently in.
+	public uint DisplayId
+	{
+		get
+		{
+#if BROWSER
+			return 0;
+#else
+			if (Handle == nint.Zero)
+				throw closedWindowException;
+			return SDL_GetDisplayForWindow(Handle);
+#endif
+		}
+	}
+
+	/// Gets the Name of the Display that the Window is currently in.
+	public string DisplayName
+	{
+		get
+		{
+#if BROWSER
+			return string.Empty;
+#else
+			if (Handle == nint.Zero)
+				throw closedWindowException;
+			return SDL_GetDisplayName(SDL_GetDisplayForWindow(Handle));
+#endif
+		}
+	}
+
+	/// Gets the Refresh Rate in Hz of the Display that the Window is currently in, or 0 if unknown.
+	public unsafe float DisplayRefreshRate
+	{
+		get
+		{
+#if BROWSER
+			return 0;
+#else
+			if (Handle == nint.Zero)
+				throw closedWindowException;
+			var mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(Handle));
+			return mode == null ? 0 : mode->refresh_rate;
+#endif
+		}
+	}
+
 	/// <summary>
 	/// Gets the Size of the Display that the Window is currently in.
 	/// </summary>
