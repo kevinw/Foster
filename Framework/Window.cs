@@ -711,7 +711,7 @@ public sealed class Window : IDrawableTarget
 		}
 	}
 
-	internal void Show()
+	public void Show()
 	{
 #if BROWSER
 		return;
@@ -723,7 +723,7 @@ public sealed class Window : IDrawableTarget
 #endif
 	}
 
-	internal void Hide()
+	public void Hide()
 	{
 #if BROWSER
 		return;
