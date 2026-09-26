@@ -448,6 +448,17 @@ public abstract partial class App : IDisposable
 			inputProvider.Update(Time);
 			foreach (var window in windows)
 				window.Show();
+
+			// The window is on screen from here, but Startup can run for a second or more
+			// (loading content, building atlases) and the first Tick is what presents. Present
+			// one cleared frame now so that gap shows black rather than an unpresented swapchain.
+			if (!config.Flags.Has(AppFlags.Headless))
+			{
+				foreach (var window in windows)
+					window.Clear(Color.Black);
+				GraphicsDevice.Present();
+			}
+
 			Startup();
 
 			// begin normal game loop
