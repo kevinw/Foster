@@ -59,6 +59,10 @@ public enum TextureFormat
 	// Four half-float channels for HDR render targets and lighting.
 	R16G16B16A16Float,
 
+	// One half-float channel, for single-channel fields that need more than 8 bits of
+	// gradient -- a blurred occlusion mask banding through an 8 bit intermediate, say.
+	R16Float,
+
 	/// <summary>
 	/// Shorthand for R8G8B8A8
 	/// </summary>
@@ -75,6 +79,7 @@ public static class TextureFormatExt
 		{
 			TextureFormat.R8G8B8A8 => 4,
 			TextureFormat.R16G16B16A16Float => 8,
+			TextureFormat.R16Float => 2,
 			TextureFormat.R8 => 1,
 			TextureFormat.R8G8 => 2,
 			TextureFormat.Depth24Stencil8 => 4,
@@ -93,6 +98,7 @@ public static class TextureFormatExt
 		{
 			TextureFormat.R8G8B8A8 => true,
 			TextureFormat.R16G16B16A16Float => true,
+			TextureFormat.R16Float => true,
 			TextureFormat.R8 => true,
 			TextureFormat.R8G8 => true,
 			TextureFormat.Depth24Stencil8 => false,
