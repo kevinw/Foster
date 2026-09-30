@@ -341,7 +341,7 @@ internal unsafe class GraphicsDeviceSDL(App app, GraphicsDriver preferred, int f
 		// get desired mode
 		var desired = vsyncEnabled
 			? SDL_GPUPresentMode.SDL_GPU_PRESENTMODE_VSYNC
-			: SDL_GPUPresentMode.SDL_GPU_PRESENTMODE_IMMEDIATE;
+			: SDL_GPUPresentMode.SDL_GPU_PRESENTMODE_MAILBOX;
 
 		// desired mode isn't supported ... fallback, eventually to v-sync, as it's the only always supported mode
 		// https://wiki.libsdl.org/SDL3/SDL_GPUPresentMode#remarks
