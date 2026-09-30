@@ -390,7 +390,8 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 	static int[] Scratch(int[][] cache, int count) => cache[count] ??= new int[count];
 
 	public override bool IsTextureFormatSupported(TextureFormat format)
-		=> format is TextureFormat.Color or TextureFormat.R8G8B8A8 or TextureFormat.R8 or TextureFormat.R8G8 or TextureFormat.R16G16B16A16Float;
+		=> format is TextureFormat.Color or TextureFormat.R8G8B8A8 or TextureFormat.R8 or TextureFormat.R8G8
+			or TextureFormat.R16G16B16A16Float or TextureFormat.R16Float;
 
 	public override bool IsTextureMultiSampleSupported(TextureFormat format, SampleCount sampleCount)
 		=> sampleCount == SampleCount.One && IsTextureFormatSupported(format);
@@ -437,6 +438,7 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 			TextureFormat.R8 => 1,
 			TextureFormat.R8G8 => 2,
 			TextureFormat.R16G16B16A16Float => 3,
+			TextureFormat.R16Float => 4,
 			_ => throw new NotSupportedException($"Unsupported WebGPU texture format {format}.")
 		};
 

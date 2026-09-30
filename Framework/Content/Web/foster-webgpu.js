@@ -56,6 +56,7 @@ function textureFormat(format) {
 		case 1: return "r8unorm";
 		case 2: return "rg8unorm";
 		case 3: return "rgba16float";
+		case 4: return "r16float";
 		default: return "rgba8unorm";
 	}
 }
@@ -65,6 +66,7 @@ function bytesPerPixelForFormat(format) {
 		case "r8unorm": return 1;
 		case "rg8unorm": return 2;
 		case "rgba16float": return 8;
+		case "r16float": return 2;
 		default: return 4;
 	}
 }
