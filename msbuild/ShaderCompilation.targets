@@ -67,6 +67,7 @@
 
     <_ShaderCompile Include="@(_ShaderVertex);@(_ShaderFragment);@(_ShaderCompute)" />
     <_ShaderInclude Include="$(ShaderSourceDir)/Common.hlsl" Condition="Exists('$(ShaderSourceDir)/Common.hlsl')" />
+    <_ShaderInclude Include="$(ShaderSourceDir)/Include/*.hlsl" />
   </ItemGroup>
 
   <!-- Compute output paths -->
