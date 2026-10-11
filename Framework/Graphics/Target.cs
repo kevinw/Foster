@@ -90,6 +90,30 @@ public class Target : IGraphicResource, IDrawableTarget
 		}
 	}
 
+	/// <summary>
+	/// Constructs a Target that draws into existing Target attachments at once (multiple render targets),
+	/// e.g. two Targets' color textures. The Textures stay owned, and disposed, by the Targets they came from.
+	/// Every draw uses the same blend for each attachment, and its fragment shader must write each of them.
+	/// </summary>
+	public Target(GraphicsDevice graphicsDevice, Texture[] attachments, string? name = null)
+	{
+		if (attachments.Length <= 0)
+			throw new ArgumentException("Target needs at least 1 color attachment");
+		foreach (var it in attachments)
+			if (!it.IsTargetAttachment || it.Width != attachments[0].Width || it.Height != attachments[0].Height)
+				throw new ArgumentException("Borrowed attachments must be same-sized Target attachments");
+
+		Name = name ?? string.Empty;
+		GraphicsDevice = graphicsDevice;
+		Resource = GraphicsDevice.CreateTarget(attachments[0].Width, attachments[0].Height);
+		Width = attachments[0].Width;
+		Height = attachments[0].Height;
+		Bounds = new RectInt(0, 0, Width, Height);
+		Attachments = attachments;
+		foreach (var it in attachments)
+			GraphicsDevice.BorrowTargetAttachment(Resource, it.Resource);
+	}
+
 	~Target() => Dispose();
 
 	private static StackList16<(TextureFormat Format, TextureFlags Flags, SampleCount SampleCount)> GetAttachments(in ReadOnlySpan<TextureFormat> values, TextureFlags flags)

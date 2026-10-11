@@ -160,6 +160,9 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 	internal override ResourceHandle CreateTarget(int width, int height)
 		=> AddResource(new TargetResource { BrowserHandle = BrowserWebGPU.CreateTarget(string.Empty, width, height), Width = width, Height = height });
 
+	internal override void BorrowTargetAttachment(ResourceHandle target, ResourceHandle texture)
+		=> BrowserWebGPU.BorrowTargetAttachment(Find<TargetResource>(target).BrowserHandle, Find<TextureResource>(texture).BrowserHandle);
+
 	internal override ResourceHandle CreateShader(Shader shader, byte[] code, string entryPoint)
 	{
 		var text = System.Text.Encoding.UTF8.GetString(code);

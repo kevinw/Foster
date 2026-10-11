@@ -116,6 +116,7 @@ public abstract class GraphicsDevice
 	internal abstract void GetTextureData(ResourceHandle texture, nint data, int length, RectInt sourceRegion);
 	internal abstract void BlitTexture(ResourceHandle sourceTexture, RectInt sourceRegion, ResourceHandle destTexture, RectInt destRegion, TextureFilter filter);
 	internal abstract ResourceHandle CreateTarget(int width, int height);
+	internal virtual void BorrowTargetAttachment(ResourceHandle target, ResourceHandle texture) { }
 	internal abstract ResourceHandle CreateShader(Shader shader, byte[] code, string entryPoint);
 	internal abstract ResourceHandle CreateBuffer(string? name, BufferType type, IndexFormat format);
 	internal abstract void UploadBufferData(ResourceHandle buffer, nint data, int dataSize, int dataDestOffset);

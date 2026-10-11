@@ -520,6 +520,21 @@ public class Batcher : IDisposable
 	}
 
 	/// <summary>
+	/// Pushes a Material without snapshotting it, unlike <see cref="PushMaterial"/>: draws use its state
+	/// as of <see cref="Render(IDrawableTarget, RectInt?, RectInt?)"/>, so it must not change until then.
+	/// Skips the copy, and consecutive draws with the same Material share a batch.
+	/// Pop with <see cref="PopMaterial"/>.
+	/// </summary>
+	public void PushSharedMaterial(Material material)
+	{
+		if (material.Fragment.Shader == null || material.Vertex.Shader == null)
+			throw new Exception("Shared Material must have a Vertex and Fragment assigned");
+
+		materialStack.Push(currentBatch.Material);
+		SetMaterial(material);
+	}
+
+	/// <summary>
 	/// Pops the current Material
 	/// </summary>
 	public void PopMaterial()

@@ -90,6 +90,9 @@ internal static partial class BrowserWebGPU
 	[JSImport("createTarget", "FosterWebGPU")]
 	internal static partial int CreateTarget(string name, int width, int height);
 
+	[JSImport("borrowTargetAttachment", "FosterWebGPU")]
+	internal static partial void BorrowTargetAttachment(int target, int texture);
+
 	[JSImport("createShader", "FosterWebGPU")]
 	internal static partial int CreateShader(string name, string code, string entryPoint);
 

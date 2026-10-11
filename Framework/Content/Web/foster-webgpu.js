@@ -140,8 +140,8 @@ function colorWriteMask(mask) {
 	return result;
 }
 
-function createPipeline(vertexShader, fragmentShader, targetFormat, blend, vertexStride, vertexLocations, vertexOffsets, vertexTypes, vertexNormalized, vertexElementCount, vertexLayoutCacheKey) {
-	const key = `${vertexShader}:${fragmentShader}:${targetFormat}:${blend.join(",")}:${vertexLayoutCacheKey}`;
+function createPipeline(vertexShader, fragmentShader, targetFormats, blend, vertexStride, vertexLocations, vertexOffsets, vertexTypes, vertexNormalized, vertexElementCount, vertexLayoutCacheKey) {
+	const key = `${vertexShader}:${fragmentShader}:${targetFormats.join("+")}:${blend.join(",")}:${vertexLayoutCacheKey}`;
 	const cached = pipelineCache.get(key);
 	if (cached)
 		return cached;
@@ -158,8 +158,9 @@ function createPipeline(vertexShader, fragmentShader, targetFormat, blend, verte
 		fragment: {
 			module: get(fragmentShader).module,
 			entryPoint: get(fragmentShader).entryPoint,
-			targets: [{
-				format: targetFormat,
+			// One blend for every attachment, as on the SDL backend.
+			targets: targetFormats.map(format => ({
+				format,
 				blend: {
 					color: {
 						srcFactor: blendFactor(blend[1]),
@@ -173,7 +174,7 @@ function createPipeline(vertexShader, fragmentShader, targetFormat, blend, verte
 					},
 				},
 				writeMask: colorWriteMask(blend[6]),
-			}],
+			})),
 		},
 		primitive: { topology: "triangle-list" },
 	});
@@ -319,19 +320,25 @@ function targetInfo(targetHandle) {
 			handle: 0,
 			width: canvas.width,
 			height: canvas.height,
+			textures: [],
+			formats: [swapchainFormat],
 			format: swapchainFormat,
-			view: context.getCurrentTexture().createView(),
+			views: [context.getCurrentTexture().createView()],
 		};
 	}
 
+	// A target either owns its attachments or borrows other targets' (multiple render targets).
 	const target = get(targetHandle);
-	const attachment = get(target.attachments[0]);
+	const textures = target.attachments.length > 0 ? target.attachments : target.borrowed;
+	const formats = textures.map(handle => get(handle).format);
 	return {
 		handle: targetHandle,
 		width: target.width,
 		height: target.height,
-		format: attachment.format,
-		view: attachment.view,
+		textures,
+		formats,
+		format: formats.join("+"),
+		views: textures.map(handle => get(handle).view),
 	};
 }
 
@@ -374,18 +381,23 @@ function ensurePass(targetHandle) {
 	if (pass && activeTarget === targetHandle && activeTargetFormat === info.format)
 		return info;
 
+	// Borrowed attachments may still owe a deferred clear to the target that owns them.
+	for (const texture of info.textures)
+		if (get(texture).targetHandle !== targetHandle)
+			flushPendingClearForTexture(texture);
+
 	endPass();
 	ensureEncoder();
 
 	const clear = pendingClears.get(targetHandle);
 	pendingClears.delete(targetHandle);
 	pass = encoder.beginRenderPass({
-		colorAttachments: [{
-			view: info.view,
+		colorAttachments: info.views.map(view => ({
+			view,
 			loadOp: clear ? "clear" : "load",
 			clearValue: clear ?? { r: 0, g: 0, b: 0, a: 0 },
 			storeOp: "store",
-		}],
+		})),
 	});
 	activeTarget = targetHandle;
 	activeTargetFormat = info.format;
@@ -614,7 +626,12 @@ export function getGamepadAxisValue(slot, axis) {
 }
 
 export function createTarget(name, width, height) {
-	return add({ name, width, height, attachments: [] });
+	return add({ name, width, height, attachments: [], borrowed: [] });
+}
+
+// Draw into another target's attachment too; the texture stays owned (and destroyed) by that target.
+export function borrowTargetAttachment(targetHandle, textureHandle) {
+	get(targetHandle).borrowed.push(textureHandle);
 }
 
 export function createTexture(name, width, height, layers, formatValue, targetHandle, computeUsage = 0) {
@@ -833,7 +850,7 @@ export function drawBatch(
 	// previous one).
 	lastDraw = `${get(vertexShader).name} -> ${get(fragmentShader).name} (vtxUniform=${vertexUniformLength}B, fragUniform=${fragmentUniformLength}B, samplers=${samplerCount})`;
 	const layoutKey = vertexLayoutKey(vertexStride, vertexLocations, vertexOffsets, vertexTypes, vertexNormalized, vertexElementCount);
-	const pipeline = createPipeline(vertexShader, fragmentShader, target.format, blend, vertexStride, vertexLocations, vertexOffsets, vertexTypes, vertexNormalized, vertexElementCount, layoutKey);
+	const pipeline = createPipeline(vertexShader, fragmentShader, target.formats, blend, vertexStride, vertexLocations, vertexOffsets, vertexTypes, vertexNormalized, vertexElementCount, layoutKey);
 
 	pass.pushDebugGroup(lastDraw);
 
