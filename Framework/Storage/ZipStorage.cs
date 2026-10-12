@@ -1,5 +1,5 @@
 using System.IO.Compression;
-using System.Text.RegularExpressions;
+using System.IO.Enumeration;
 
 namespace Foster.Framework;
 
@@ -125,16 +125,14 @@ public class ZipStorage : StorageContainer
 		if (!path.EndsWith('/'))
 			path += '/';
 
-		Regex? pattern = null;
-		if (!string.IsNullOrEmpty(searchPattern))
-			pattern = new("^" + Regex.Escape(searchPattern).Replace("\\?", ".").Replace("\\*", ".*") + "$");
+		var pattern = string.IsNullOrEmpty(searchPattern) ? null : searchPattern;
 
 		foreach (var entry in entries)
 		{
 			if (pattern != null)
 			{
 				var relative = Calc.NormalizePath(Path.GetRelativePath(path, entry.Key));
-				if (pattern != null && !pattern.IsMatch(relative))
+				if (pattern != null && !FileSystemName.MatchesSimpleExpression(pattern, relative, ignoreCase: false))
 					continue;
 			}
 			

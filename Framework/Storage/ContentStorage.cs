@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Text.RegularExpressions;
+using System.IO.Enumeration;
 using static SDL3.SDL;
 
 namespace Foster.Framework;
@@ -56,12 +56,12 @@ public sealed class ContentStorage : StorageContainer
 			info.type == SDL_PathType.SDL_PATHTYPE_DIRECTORY;
 	}
 
-	private class EnumerateDirectoryUserData(nint handle, string path, Regex? searchPattern, bool recursive)
+	private class EnumerateDirectoryUserData(nint handle, string path, string? searchPattern, bool recursive)
 	{
 		public readonly List<string> Entries = [];
 		public readonly List<string> SubFolders = [];
 		public readonly nint StorageHandle = handle;
-		public readonly Regex? SearchPattern = searchPattern;
+		public readonly string? SearchPattern = searchPattern;
 		public string CurrentPath = path;
 		public string SearchPath = path;
 		public bool Recursive = recursive;
@@ -111,7 +111,7 @@ public sealed class ContentStorage : StorageContainer
 			{
 				// path relative to the root path
 				var relativeToSearch = Calc.NormalizePath(Path.GetRelativePath(data.SearchPath, path));
-				if (!data.SearchPattern.IsMatch(relativeToSearch))
+				if (!FileSystemName.MatchesSimpleExpression(data.SearchPattern, relativeToSearch, ignoreCase: false))
 					return SDL_EnumerationResult.SDL_ENUM_CONTINUE;
 			}
 
@@ -125,9 +125,7 @@ public sealed class ContentStorage : StorageContainer
 		path ??= "";
 		path = Calc.NormalizePath(path);
 
-		Regex? pattern = null;
-		if (!string.IsNullOrEmpty(searchPattern))
-			pattern = new("^" + Regex.Escape(searchPattern).Replace("\\?", ".").Replace("\\*", ".*") + "$");
+		var pattern = string.IsNullOrEmpty(searchPattern) ? null : searchPattern;
 
 		var userdata = new EnumerateDirectoryUserData(handle, path, pattern, searchOption == SearchOption.AllDirectories);
 		var userdataHandle = GCHandle.Alloc(userdata);
