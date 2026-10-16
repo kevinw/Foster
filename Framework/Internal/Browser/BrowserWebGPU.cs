@@ -132,6 +132,7 @@ internal static partial class BrowserWebGPU
 		int[] vertexSamplerWrapY,
 		int vertexSamplerCount,
 		int[] vertexStorageBuffers,
+		int[] fragmentStorageBuffers,
 		byte[] vertexUniform,
 		int vertexUniformLength,
 		byte[] fragmentUniform,

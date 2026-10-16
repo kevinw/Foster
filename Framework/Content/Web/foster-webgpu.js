@@ -805,6 +805,7 @@ export function drawBatch(
 	vertexSamplerWrapY,
 	vertexSamplerCount,
 	vertexStorageBuffers,
+	fragmentStorageBuffers,
 	vertexUniform,
 	vertexUniformLength,
 	fragmentUniform,
@@ -874,7 +875,18 @@ export function drawBatch(
 		pass.setBindGroup(1, matrixBindGroup);
 	}
 
-	if (samplerCount > 0) {
+	// Group 2: fragment textures (binding i), samplers (100+i), then fragment storage buffers after the textures --
+	// SDL's register order. Storage buffers are re-uploaded (and cycled) freely, so their groups aren't cached.
+	if (fragmentStorageBuffers.length > 0) {
+		const entries = [];
+		for (let i = 0; i < samplerCount; i++) {
+			entries.push({ binding: i, resource: textureHandles[i] ? get(textureHandles[i]).view : fallbackTextureView });
+			entries.push({ binding: 100 + i, resource: samplerFor(samplerFilters[i] ?? 0, samplerWrapX[i] ?? 0, samplerWrapY[i] ?? 0) });
+		}
+		for (let i = 0; i < fragmentStorageBuffers.length; i++)
+			entries.push({ binding: samplerCount + i, resource: { buffer: get(fragmentStorageBuffers[i]).buffer } });
+		pass.setBindGroup(2, device.createBindGroup({ label: `${lastDraw} [fragment group2]`, layout: pipeline.getBindGroupLayout(2), entries }));
+	} else if (samplerCount > 0) {
 		pass.setBindGroup(2, textureBindGroupFor(pipeline, textureHandles, samplerFilters, samplerWrapX, samplerWrapY, samplerCount));
 	}
 

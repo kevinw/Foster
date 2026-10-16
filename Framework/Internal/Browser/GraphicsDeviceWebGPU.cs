@@ -279,9 +279,9 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 			drawVertexSamplerWrapX[i] = sampler.Sampler.WrapX switch { TextureWrap.Repeat => 1, TextureWrap.MirroredRepeat => 2, _ => 0 };
 			drawVertexSamplerWrapY[i] = sampler.Sampler.WrapY switch { TextureWrap.Repeat => 1, TextureWrap.MirroredRepeat => 2, _ => 0 };
 		}
-		var vertexStorageBuffers = new int[command.VertexStorageBuffers.Count];
-		for (var i = 0; i < vertexStorageBuffers.Length; i++)
-			vertexStorageBuffers[i] = Find<BufferResource>(command.VertexStorageBuffers[i]!.Resource).BrowserHandle;
+		var vertexStorageBuffers = StorageBufferHandles(command.VertexStorageBuffers);
+		// Fragment storage buffers bind in the fragment texture group, after the sampled textures.
+		var fragmentStorageBuffers = StorageBufferHandles(command.FragmentStorageBuffers);
 
 		var vertexUniformLength = CopyUniform(command.VertexUniformBuffers.Count > 0 ? command.VertexUniformBuffers[0] : null, ref drawVertexUniform);
 		var fragmentUniformLength = CopyUniform(command.FragmentUniformBuffers.Count > 0 ? command.FragmentUniformBuffers[0] : null, ref drawFragmentUniform);
@@ -311,6 +311,7 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 			drawVertexSamplerWrapY,
 			vertexSamplerCount,
 			vertexStorageBuffers,
+			fragmentStorageBuffers,
 			drawVertexUniform,
 			vertexUniformLength,
 			drawFragmentUniform,
@@ -418,6 +419,17 @@ internal sealed class GraphicsDeviceWebGPU(App app) : GraphicsDevice(app)
 
 	private static int AlignTo(int value, int alignment)
 		=> (value + alignment - 1) & ~(alignment - 1);
+
+	// JS interop needs exact-length arrays; ordinary draws bind none, so they share the empty one.
+	private int[] StorageBufferHandles(in StackList4<StorageBuffer?> buffers)
+	{
+		if (buffers.Count == 0)
+			return [];
+		var handles = new int[buffers.Count];
+		for (var i = 0; i < handles.Length; i++)
+			handles[i] = Find<BufferResource>(buffers[i]!.Resource).BrowserHandle;
+		return handles;
+	}
 
 	private static int CopyUniform(UniformBuffer? uniform, ref byte[] scratch)
 	{
